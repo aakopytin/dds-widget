@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ДДС</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #f8f9fd;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  color: #111827;
+  padding: 12px;
+}
+.hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.hdr h1 { font-size: 14px; font-weight: 600; color: #111827; }
+.hdr .meta { font-size: 11px; color: #9ca3af; }
+.status { font-size: 11px; display: flex; align-items: center; gap: 6px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #16a34a; animation: p 2s infinite; }
+.dot.loading { background: #f59e0b; animation: none; }
+.dot.error { background: #dc2626; animation: none; }
+@keyframes p { 0%,100%{opacity:1} 50%{opacity:.4} }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 5px 6px; font-size: 12px; }
+td:last-child { text-align: right; }
+.sec-label td {
+  padding: 9px 6px 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #9ca3af;
+  border-top: 1px solid #e5e7eb;
+}
+.sep td { border-top: 1px solid #e5e7eb; padding-top: 7px; }
+.bold td { font-weight: 600; }
+.green { color: #16a34a; }
+.red { color: #dc2626; }
+.muted { color: #9ca3af; }
+.indent { padding-left: 18px !important; }
+.ftr {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 10px;
+  color: #9ca3af;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.btn {
+  background: none; border: 1px solid #d1d5db;
+  color: #6b7280; font-size: 10px; padding: 2px 8px;
+  border-radius: 4px; cursor: pointer;
+}
+.btn:hover { border-color: #16a34a; color: #16a34a; }
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div>
+    <h1>ДДС — <span id="period">Июнь 2026</span></h1>
+    <div class="meta" id="dateRange">01.06 — 03.06.2026</div>
+  </div>
+  <div class="status">
+    <div class="dot loading" id="dot"></div>
+    <span id="stxt">загрузка…</span>
+  </div>
+</div>
+
+<table id="tbl"></table>
+
+<div class="ftr">
+  <span id="lu"></span>
+  <button class="btn" id="rbtn">↻ обновить</button>
+</div>
+
+<script>
+// ─── Маппинг plan_money_id → категория ─────────────────────────
+var PM = {980:'bk',983:'zp',1707:'pr',1708:'km',1715:'zp',1721:'bk',1723:'zp',1730:'po'};
+var VSIP = {1:1,2:1,3:1,4:1,5:1,6:1,7:1,8:1,107:1};
+var TT = 18;
+var OFF = {24:1, 26:1};
+var TR = 27;
+var PIDS = [1,3,13,12,23,9,6];
+var PNAMES = ['Кемерово','Южно-Сахалинск','Барнаул','Киров','Сыктывкар','Рузаевка','Десногорск'];
+
+// ─── Статичные данные 01-03.06 (fallback) ──────────────────────
+var STATIC = {
+  vsipS:44241102.72, ttS:-1236536.5,
+  vsipE:32036642.57, ttE:-1000922.07,
+  s1:43004566.22, s2:31035720.50,
+  pr:10306.86, zp:1480522.26, km:100000, bk:8963.26, po:550,
+  pj:{1:8009142.66,13:620551.4,12:164380,23:210000,9:1331651,6:53550},
+  tp:10389275.06, te:11979310.58, cnt:53,
+  fd:'01.06.2026', ld:'03.06.2026', lbl:'Июнь 2026'
+};
+
+// ─── Форматирование ─────────────────────────────────────────────
+var F = function(v){
+  if(v==null||v===0) return '—';
+  return new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);
+};
+
+// ─── Построение таблицы ─────────────────────────────────────────
+function row(label, val, cls, indent, bold, sep) {
+  var tr = document.createElement('tr');
+  if(sep) tr.className='sep'+(bold?' bold':'');
+  else if(bold) tr.className='bold';
+  var td1 = document.createElement('td');
+  if(indent) td1.className='indent';
+  td1.textContent = label;
+  var td2 = document.createElement('td');
+  td2.textContent = F(val);
+  if(cls) td2.className=cls;
+  tr.appendChild(td1); tr.appendChild(td2);
+  return tr;
+}
+function secLabel(txt) {
+  var tr = document.createElement('tr'); tr.className='sec-label';
+  var td = document.createElement('td'); td.colSpan=2; td.textContent=txt;
+  tr.appendChild(td); return tr;
+}
+
+function render(d, live) {
+  document.getElementById('period').textContent = d.lbl;
+  document.getElementById('dateRange').textContent = d.fd + ' — ' + d.ld;
+
+  var t = document.getElementById('tbl');
+  t.innerHTML = '';
+
+  // Остатки
+  t.appendChild(row('Остаток '+d.fd+' · ВСИП', d.vsipS, '', false, false, false));
+  t.appendChild(row('Остаток '+d.fd+' · ТТ',   d.ttS,   d.ttS<0?'red':'', false, false, false));
+  t.appendChild(row('ИТОГО на '+d.fd,           d.s1,    '', false, true, true));
+  t.appendChild(row('Остаток '+d.ld+' · ВСИП',  d.vsipE, '', false, false, false));
+  t.appendChild(row('Остаток '+d.ld+' · ТТ',    d.ttE,   d.ttE<0?'red':'', false, false, false));
+  t.appendChild(row('ИТОГО на '+d.ld,           d.s2,    d.s2>0?'green':'red', false, true, true));
+
+  // Поступления
+  t.appendChild(secLabel('Поступления'));
+  t.appendChild(row('Процентные доходы', d.pr, d.pr?'green':'muted', true, false, false));
+
+  // Расходы по проектам
+  t.appendChild(secLabel('Расходы по проектам'));
+  for(var i=0;i<PIDS.length;i++){
+    var a = d.pj[PIDS[i]]||0;
+    t.appendChild(row(PNAMES[i], a, a?'':'muted', true, false, false));
+  }
+  t.appendChild(row('Итого проекты', d.tp, '', false, true, true));
+
+  // Офисные расходы
+  t.appendChild(secLabel('Офисные расходы'));
+  t.appendChild(row('Зарплата',             d.zp, d.zp?'':'muted', true, false, false));
+  t.appendChild(row('Налоги',               d.nx||0, (d.nx||0)?'':'muted', true, false, false));
+  t.appendChild(row('Командировочные',       d.km, d.km?'':'muted', true, false, false));
+  t.appendChild(row('Лизинг',               d.lz||0, (d.lz||0)?'':'muted', true, false, false));
+  t.appendChild(row('Банковские комиссии',   d.bk, d.bk?'':'muted', true, false, false));
+  t.appendChild(row('Аренда',               d.ar||0, (d.ar||0)?'':'muted', true, false, false));
+  t.appendChild(row('Прочие расходы офиса', d.po, d.po?'':'muted', true, false, false));
+  t.appendChild(row('ВСЕГО РАСХОДОВ',       d.te, '', false, true, true));
+
+  document.getElementById('lu').textContent = 'обновлено: ' + new Date().toLocaleTimeString('ru-RU');
+  var dot = document.getElementById('dot');
+  var stxt = document.getElementById('stxt');
+  if(live){ dot.className='dot'; stxt.textContent='live · '+d.cnt+' тр.'; }
+  else     { dot.className='dot loading'; stxt.textContent='статичные · '+d.ld; }
+}
+
+// ─── Получение диапазона текущего месяца ────────────────────────
+function getRange() {
+  var n=new Date(), y=n.getFullYear(), m=n.getMonth();
+  var pad=function(x){return x<10?'0'+x:''+x;};
+  var last=new Date(y,m+1,0).getDate();
+  var mn=['Январь','Февраль','Март','Апрель','Май','Июнь',
+          'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'][m];
+  return {
+    start: y+'-'+pad(m+1)+'-01',
+    end:   y+'-'+pad(m+1)+'-'+pad(last),
+    fd:    '01.'+pad(m+1)+'.'+y,
+    ld:    pad(last)+'.'+pad(m+1)+'.'+y,
+    lbl:   mn+' '+y
+  };
+}
+
+// ─── Построение отчёта из транзакций ────────────────────────────
+function buildReport(txns, range) {
+  var vsipI=0,vsipO=0,ttI=0,ttO=0,pr=0,zp=0,km=0,bk=0,po=0,pj={};
+  for(var i=0;i<txns.length;i++){
+    var t=txns[i];
+    var acc=t.org_account_id, pid=t.project_id||0, pm=t.plan_money_id||0;
+    var inc=parseFloat(t.income)||0, out=parseFloat(t.outcome)||0;
+    if(VSIP[acc]){vsipI+=inc;vsipO+=out;}
+    if(acc===TT){ttI+=inc;ttO+=out;}
+    if(t.type===10&&pid===24&&PM[pm]==='pr') pr+=inc;
+    if(t.type===20&&!OFF[pid]&&pid!==TR&&pid!==0) pj[pid]=(pj[pid]||0)+out;
+    if(t.type===20&&OFF[pid]){
+      var c=PM[pm]||'po';
+      if(c==='zp')zp+=out; else if(c==='km')km+=out; else if(c==='bk')bk+=out; else po+=out;
+    }
+  }
+  var vsipE=STATIC.vsipS+vsipI-vsipO, ttE=STATIC.ttS+ttI-ttO;
+  var tp=Object.values?Object.values(pj).reduce(function(a,b){return a+b;},0):
+    Object.keys(pj).reduce(function(s,k){return s+pj[k];},0);
+  return {
+    vsipS:STATIC.vsipS, ttS:STATIC.ttS, vsipE:vsipE, ttE:ttE,
+    s1:STATIC.s1, s2:vsipE+ttE,
+    pr:pr, zp:zp, km:km, bk:bk, po:po,
+    pj:pj, tp:tp, te:tp+zp+km+bk+po,
+    cnt:txns.length, fd:range.fd, ld:range.ld, lbl:range.lbl
+  };
+}
+
+// ─── Загрузка данных ────────────────────────────────────────────
+function load() {
+  document.getElementById('dot').className = 'dot loading';
+  document.getElementById('stxt').textContent = 'загрузка…';
+
+  // Получаем токен от Аспро через postMessage (JS SDK)
+  var token = null;
+
+  // Слушаем токен от родительского фрейма
+  window.addEventListener('message', function handler(e) {
+    if(e.data && e.data.type === 'aspro:auth' && e.data.token) {
+      token = e.data.token;
+      window.removeEventListener('message', handler);
+      fetchData(token);
+    }
+  });
+
+  // Запрашиваем токен у родителя
+  if(window.parent !== window) {
+    window.parent.postMessage({type: 'aspro:requestAuth'}, '*');
+    // Если за 2 сек не ответили — используем cookie-сессию
+    setTimeout(function(){ if(!token) fetchData(null); }, 2000);
+  } else {
+    // Открыт напрямую — используем сессию
+    fetchData(null);
+  }
+}
+
+function fetchData(token) {
+  var range = getRange();
+  var url = '/api/v1/fin/transaction'
+    + '?filter[date][start_date]=' + range.start
+    + '&filter[date][end_date]='   + range.end
+    + '&limit=500';
+
+  var headers = {'Content-Type': 'application/json'};
+  if(token) headers['Authorization'] = 'Bearer ' + token;
+
+  fetch(url, {headers: headers, credentials: 'include'})
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function(j){
+      var txns = j.data || j.items || j.list || [];
+      if(txns.length > 0) {
+        render(buildReport(txns, range), true);
+      } else {
+        render(STATIC, false);
+      }
+    })
+    .catch(function(){ render(STATIC, false); });
+}
+
+document.getElementById('rbtn').onclick = load;
+load();
+setInterval(load, 300000);
+</script>
+</body>
+</html>
