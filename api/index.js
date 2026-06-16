@@ -193,8 +193,25 @@ function loadData(resetStart){
     apiFetch('/_module/fin/rest/payin/list/').catch(function(){return null;})
   ]).then(function(res){
     var rows=res[0].data||[];
-    if(rows.length>0){var rep=buildReport(rows,res[1]?res[1].data:[],range);d.innerHTML=renderHTML(rep,true);}
-    else{d.innerHTML='<div style="padding:12px;color:#9ca3af;font-size:12px;">Нет данных за '+range.label+'</div>';}
+    console.log('[DDS] tx rows:',rows.length,'first row:',rows[0]);
+    if(rows.length>0){
+      var rep=buildReport(rows,res[1]?res[1].data:[],range);
+      // Диагностика если все отфильтровалось
+      if(rep.cnt===0||(!rep.pjIn&&!rep.pjOut&&!rep.pr&&!rep.zp)){
+        var sample=rows.slice(0,3).map(function(r){return'['+r[0]+' acc='+r[8]+' art='+r[9]+']';}).join(', ');
+        d.innerHTML='<div style="padding:12px;font-size:11px;color:#666;">'
+          +'Данных '+(rows.length)+' строк, но все отфильтрованы.<br>'
+          +'Примеры: '+sample+'<br>'
+          +'Диапазон: '+range.start+' — '+range.end+'</div>';
+        return;
+      }
+      d.innerHTML=renderHTML(rep,true);
+    }
+    else{
+      // Показываем что пришло от API для диагностики
+      var raw=JSON.stringify(res[0]).slice(0,200);
+      d.innerHTML='<div style="padding:12px;font-size:11px;color:#666;">API вернул пустой массив.<br><small>'+raw+'</small></div>';
+    }
     var btn=document.getElementById('dds-btn');if(btn)btn.onclick=function(){loadData(false);};
     var rst=document.getElementById('dds-reset');if(rst)rst.onclick=function(){loadData(true);};
   }).catch(function(err){
