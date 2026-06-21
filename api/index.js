@@ -294,7 +294,13 @@ function load(reset){
       el.innerHTML=render(r,true);
       renderPoDet(r.poDet);
     }else{
-      el.innerHTML="<div style='padding:12px;color:#9ca3af'>Нет данных за "+rng.label+"</div>";
+      el.innerHTML="<div style='padding:12px;font-size:11px;color:#666'>"
+        +"Нет данных за "+rng.label+"<br>"
+        +"tx всего: "+txAll.length+", за месяц: "+txM.length+"<br>"
+        +"диапазон: "+rng.s0+" — "+rng.s1+"<br>"
+        +"domain: "+DOMAIN+"<br>"
+        +"token: "+(TOKEN?TOKEN.slice(0,20)+"...":"нет")
+        +"</div>";
     }
     var b=document.getElementById("btn");if(b)b.onclick=function(){load(false);};
     var rb=document.getElementById("rst");if(rb)rb.onclick=function(){load(true);};
