@@ -205,10 +205,10 @@ function buildReport(txItems, accountItems, catItems, range){
   var vsipEnd=null,ttEnd=null;
   try{
     var text=window.parent.document.body.innerText||'';
-    var mv=text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*p\\.\\s*\\n\\s*ВСИП/)||text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*р\\.\\s*\\n\\s*ВСИП/);
-    var mt=text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*p\\.\\s*\\n\\s*ООО/)||text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*р\\.\\s*\\n\\s*ООО/);
-    if(mv)vsipEnd=parseNum(mv[1].replace(/[\\s\\u00a0]/g,'').replace(',','.'));
-    if(mt)ttEnd=parseNum(mt[1].replace(/[\\s\\u00a0]/g,'').replace(',','.'));
+    var mv=text.match(/([-\d][\d\s\u00a0]*)[\s\u00a0]*[рp]\.\s*\n\s*ВСИП/);
+    var mt=text.match(/([-\d][\d\s\u00a0]*)[\s\u00a0]*[рp]\.\s*\n\s*ООО/);
+    if(mv)vsipEnd=parseNum(mv[1].replace(/[\s\u00a0]/g,''));
+    if(mt)ttEnd=parseNum(mt[1].replace(/[\s\u00a0]/g,''));
   }catch(e){}
 
   var fixed=getFixed(range.ymd),vsipStart,ttStart;
