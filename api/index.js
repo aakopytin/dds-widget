@@ -120,23 +120,41 @@ function getF(ym){try{var s=localStorage.getItem(lk(ym));return s?JSON.parse(s):
 function setF(ym,v,t){try{localStorage.setItem(lk(ym),JSON.stringify({v:v,t:t}));}catch(e){}}
 function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
 
-// Запросы к API Аспро с Bearer токеном (из браузера, без прокси)
+// Запросы к API Аспро через XHR с куками сессии (same-origin из iframe Аспро)
 function loadAll(entity) {
   var base="https://"+DOMAIN+"/api/v1/module/fin/"+entity+"/list?count=50";
-  var headers={"Authorization":"Bearer "+TOKEN};
 
   return new Promise(function(resolve, reject){
     var all=[], page=1;
     function next(){
-      fetch(base+"&page="+page, {headers:headers})
-      .then(function(r){return r.ok?r.json():Promise.reject("HTTP "+r.status);})
-      .then(function(d){
-        var items=d?.response?.items||[];
-        var total=d?.response?.total||0;
-        all=all.concat(items);
-        if(all.length>=total||items.length===0||page>60){resolve(all);}
-        else{page++;next();}
-      }).catch(reject);
+      var xhr=new XMLHttpRequest();
+      xhr.open("GET", base+"&page="+page, true);
+      xhr.withCredentials=true;
+      // Пробуем с Bearer токеном
+      if(TOKEN) xhr.setRequestHeader("Authorization","Bearer "+TOKEN);
+      xhr.onload=function(){
+        if(xhr.status!==200){reject("HTTP "+xhr.status);return;}
+        try{
+          var d=JSON.parse(xhr.responseText);
+          var items=(d&&d.response&&d.response.items)||[];
+          var total=(d&&d.response&&d.response.total)||0;
+          all=all.concat(items);
+          console.log("[DDS] "+entity+" p"+page+": "+all.length+"/"+total);
+          if(all.length>=total||items.length===0||page>60){resolve(all);}
+          else{page++;next();}
+        }catch(e){reject(e.message);}
+      };
+      xhr.onerror=function(){
+        // XHR не работает — пробуем через /api/data прокси
+        console.log("[DDS] XHR failed for "+entity+", trying proxy");
+        fetch("/api/data",{method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({domain:DOMAIN,entity:entity})
+        }).then(function(r){return r.ok?r.json():Promise.reject("proxy HTTP "+r.status);})
+        .then(function(d){resolve(d.items||[]);})
+        .catch(reject);
+      };
+      xhr.send();
     }
     next();
   });
