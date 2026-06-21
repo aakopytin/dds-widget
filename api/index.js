@@ -29,9 +29,11 @@ module.exports = async function handler(req, res) {
   if (req.method === 'POST') {
     var raw    = await readBody(req);
     var fields = parseForm(raw);
-    var domain    = fields['domain']      || '';
-    var accountId = fields['account[id]'] || '';
-    return res.status(200).send(html(domain, accountId));
+    var domain      = fields['domain']             || '';
+    var accountId   = fields['account[id]']        || '';
+    var accessToken = fields['auth[access_token]'] || '';
+    console.log('[DDS] POST | domain:', domain, '| account:', accountId, '| hasToken:', !!accessToken);
+    return res.status(200).send(html(domain, accountId, accessToken));
   }
 
   return res.status(200).send('<html><body style="font-family:sans-serif;padding:20px">' +
@@ -42,7 +44,7 @@ function esc(s) {
   return String(s||'').replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
 }
 
-function html(domain, accountId) {
+function html(domain, accountId, accessToken) {
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -65,6 +67,7 @@ details table td{font-size:10px;color:#555;padding:2px 4px}
 <script>
 var DOMAIN="${esc(domain)}";
 var ACCOUNT_ID="${esc(accountId)}";
+var TOKEN="${esc(accessToken)}";
 
 var VSIP={
   "Альфа ВСИП":1,"ВСИП Депозиты":1,"Счет ВТБ":1,
@@ -100,27 +103,16 @@ var AC={
   "Проектирование-Изыскание":"pjOut"
 };
 
-function fmt(v){
-  if(!v&&v!==0)return"—";if(v===0)return"—";
-  return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);
-}
-function fmtI(v){
-  return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:0,maximumFractionDigits:0}).format(v||0);
-}
-function num(s){
-  if(!s&&s!==0)return 0;
-  return parseFloat(String(s).replace(/[^\\d.\\-]/g,""))||0;
-}
+function fmt(v){if(!v&&v!==0)return"—";if(v===0)return"—";return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);}
+function fmtI(v){return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:0,maximumFractionDigits:0}).format(v||0);}
+function num(s){if(!s&&s!==0)return 0;return parseFloat(String(s).replace(/[^\\d.\\-]/g,""))||0;}
 function getRange(){
   var now=new Date(),y=now.getFullYear(),m=now.getMonth();
   var p=function(n){return n<10?"0"+n:""+n;};
   var end=Math.min(now.getDate(),new Date(y,m+1,0).getDate());
-  var mo=["Январь","Февраль","Март","Апрель","Май","Июнь",
-          "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-  return{ymd:y+"-"+p(m+1),s0:y+"-"+p(m+1)+"-01",
-         s1:y+"-"+p(m+1)+"-"+p(end),
-         d0:"01."+p(m+1)+"."+y,d1:p(end)+"."+p(m+1)+"."+y,
-         label:mo[m]+" "+y};
+  var mo=["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  return{ymd:y+"-"+p(m+1),s0:y+"-"+p(m+1)+"-01",s1:y+"-"+p(m+1)+"-"+p(end),
+         d0:"01."+p(m+1)+"."+y,d1:p(end)+"."+p(m+1)+"."+y,label:mo[m]+" "+y};
 }
 
 var lk=function(ym){return"dds_"+ACCOUNT_ID+"_"+ym;};
@@ -128,41 +120,26 @@ function getF(ym){try{var s=localStorage.getItem(lk(ym));return s?JSON.parse(s):
 function setF(ym,v,t){try{localStorage.setItem(lk(ym),JSON.stringify({v:v,t:t}));}catch(e){}}
 function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
 
-// Загружаем все страницы напрямую из браузера (same-origin, куки работают)
-function loadAllPages(path, onProgress) {
-  return new Promise(function(resolve, reject) {
-    var allItems = [];
-    var page = 1;
+// Запросы к API Аспро с Bearer токеном (из браузера, без прокси)
+function loadAll(entity) {
+  var base="https://"+DOMAIN+"/api/v1/module/fin/"+entity+"/list?count=50";
+  var headers={"Authorization":"Bearer "+TOKEN};
 
-    function nextPage() {
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', 'https://'+DOMAIN+path+'&page='+page, true);
-      xhr.withCredentials = true;
-      xhr.onload = function() {
-        if (xhr.status !== 200) { reject('HTTP '+xhr.status); return; }
-        try {
-          var d = JSON.parse(xhr.responseText);
-          var items = d?.response?.items || [];
-          var total = d?.response?.total || 0;
-          allItems = allItems.concat(items);
-          if (onProgress) onProgress(allItems.length, total);
-          if (allItems.length >= total || items.length === 0 || page > 60) {
-            resolve(allItems);
-          } else {
-            page++;
-            nextPage();
-          }
-        } catch(e) { reject(e.message); }
-      };
-      xhr.onerror = function() { reject('network error'); };
-      xhr.send();
+  return new Promise(function(resolve, reject){
+    var all=[], page=1;
+    function next(){
+      fetch(base+"&page="+page, {headers:headers})
+      .then(function(r){return r.ok?r.json():Promise.reject("HTTP "+r.status);})
+      .then(function(d){
+        var items=d?.response?.items||[];
+        var total=d?.response?.total||0;
+        all=all.concat(items);
+        if(all.length>=total||items.length===0||page>60){resolve(all);}
+        else{page++;next();}
+      }).catch(reject);
     }
-    nextPage();
+    next();
   });
-}
-
-function loadEntity(path) {
-  return loadAllPages(path, null);
 }
 
 function calc(txMonth,accs,cats,rng){
@@ -170,7 +147,6 @@ function calc(txMonth,accs,cats,rng){
   accs.forEach(function(a){aMap[a.id]=a.name||"";});
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
-  // Остатки из виджетов на странице
   var vEnd=null,tEnd=null;
   try{
     var domText=window.parent.document.body.innerText||"";
@@ -185,77 +161,45 @@ function calc(txMonth,accs,cats,rng){
   }catch(e){}
 
   var pr=0,zp=0,km=0,bk=0,ins=0,po=0,pjIn=0,pjOut=0,refund=0;
-  var piP={},poP={},poDet=[];
-  var vNet=0,tNet=0;
+  var piP={},poP={},poDet=[],vNet=0,tNet=0;
 
   txMonth.forEach(function(tx){
-    var an=aMap[tx.org_account_id]||"";
-    var cn=cMap[tx.category_id]||"";
+    var an=aMap[tx.org_account_id]||"",cn=cMap[tx.category_id]||"";
     var pid=tx.project_id||0;
     var inc=num(tx.income)||0,out=num(tx.outcome)||0;
     var isV=!!VSIP[an],isT=!!TT[an];
     if(!isV&&!isT)return;
-    if(isV)vNet+=inc-out;
-    if(isT)tNet+=inc-out;
+    if(isV)vNet+=inc-out;if(isT)tNet+=inc-out;
     var rp=pid,gp=(rp&&PG[rp])?PG[rp]:rp;
     var pOk=gp&&!!PN[gp],pOff=rp&&!!OFF[rp];
-    var cat=AC[cn];
-    if(cat==="skip")return;
+    var cat=AC[cn];if(cat==="skip")return;
     if(inc>0){
       if(cat==="pr")pr+=inc;
       else if(cat==="pjIn"&&pOk){pjIn+=inc;piP[gp]=(piP[gp]||0)+inc;}
       else if(cat==="refund"&&pOk)refund+=inc;
     }
     if(out>0){
-      if(cat==="zp")zp+=out;
-      else if(cat==="km")km+=out;
-      else if(cat==="ins")ins+=out;
-      else if(cat==="bk")bk+=out;
+      if(cat==="zp")zp+=out;else if(cat==="km")km+=out;
+      else if(cat==="ins")ins+=out;else if(cat==="bk")bk+=out;
       else if(cat==="po"){po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
       else if(!pOff){pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}
     }
   });
 
   var fixed=getF(rng.ymd),vSt,tSt;
-  if(fixed){
-    vSt=fixed.v;tSt=fixed.t;
-    if(vEnd===null)vEnd=vSt+vNet;
-    if(tEnd===null)tEnd=tSt+tNet;
-  }else if(vEnd!==null&&tEnd!==null){
-    vSt=vEnd-vNet;tSt=tEnd-tNet;
-    setF(rng.ymd,vSt,tSt);
-  }else{
-    vSt=0;tSt=0;vEnd=vNet;tEnd=tNet;
-  }
+  if(fixed){vSt=fixed.v;tSt=fixed.t;if(vEnd===null)vEnd=vSt+vNet;if(tEnd===null)tEnd=tSt+tNet;}
+  else if(vEnd!==null&&tEnd!==null){vSt=vEnd-vNet;tSt=tEnd-tNet;setF(rng.ymd,vSt,tSt);}
+  else{vSt=0;tSt=0;vEnd=vNet;tEnd=tNet;}
 
   var te=pjOut+zp+km+bk+ins+po;
-  return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,
-    tS:vSt+tSt,tE:(vEnd||0)+(tEnd||0),
-    pr:pr,pjIn:pjIn,refund:refund,
-    pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,po:po,te:te,
-    piP:piP,poP:poP,poDet:poDet,
-    cnt:txMonth.length,d0:rng.d0,d1:rng.d1,label:rng.label,ymd:rng.ymd};
+  return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,tS:vSt+tSt,tE:(vEnd||0)+(tEnd||0),
+    pr:pr,pjIn:pjIn,refund:refund,pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,po:po,te:te,
+    piP:piP,poP:poP,poDet:poDet,cnt:txMonth.length,d0:rng.d0,d1:rng.d1,label:rng.label,ymd:rng.ymd};
 }
 
-function TR(l,v,cls,indent){
-  var n=fmt(v),c="";
-  if(cls==="g"&&v>0)c="color:#16a34a";
-  if(cls==="r"&&v<0)c="color:#dc2626";
-  if(cls==="m")c="color:#9ca3af";
-  var s1="padding:4px 6px"+(indent?";padding-left:14px":"");
-  var s2="padding:4px 6px;text-align:right;white-space:nowrap"+(c?";"+c:"");
-  return"<tr><td style='"+s1+"'>"+l+"</td><td style='"+s2+"'>"+n+"</td></tr>";
-}
-function SEP(l,v,cls){
-  var n=fmt(v),c="";
-  if(cls==="g"&&v>0)c="color:#16a34a";
-  if(cls==="r"&&v<0)c="color:#dc2626";
-  var s="padding:4px 6px;font-weight:600;border-top:1px solid #e5e7eb";
-  return"<tr><td style='"+s+"'>"+l+"</td><td style='"+s+";text-align:right;white-space:nowrap"+(c?";"+c:"")+"'>"+n+"</td></tr>";
-}
-function SEC(l){
-  return"<tr><td colspan='2' style='padding:7px 6px 2px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-top:1px solid #e5e7eb'>"+l+"</td></tr>";
-}
+function TR(l,v,cls,ind){var n=fmt(v),c="";if(cls==="g"&&v>0)c="color:#16a34a";if(cls==="r"&&v<0)c="color:#dc2626";if(cls==="m")c="color:#9ca3af";var s1="padding:4px 6px"+(ind?";padding-left:14px":"");var s2="padding:4px 6px;text-align:right;white-space:nowrap"+(c?";"+c:"");return"<tr><td style='"+s1+"'>"+l+"</td><td style='"+s2+"'>"+n+"</td></tr>";}
+function SEP(l,v,cls){var n=fmt(v),c="";if(cls==="g"&&v>0)c="color:#16a34a";if(cls==="r"&&v<0)c="color:#dc2626";var s="padding:4px 6px;font-weight:600;border-top:1px solid #e5e7eb";return"<tr><td style='"+s+"'>"+l+"</td><td style='"+s+";text-align:right;white-space:nowrap"+(c?";"+c:"")+"'>"+n+"</td></tr>";}
+function SEC(l){return"<tr><td colspan='2' style='padding:7px 6px 2px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-top:1px solid #e5e7eb'>"+l+"</td></tr>";}
 
 function render(r,live){
   var rows=[],tot=0;
@@ -285,8 +229,7 @@ function render(r,live){
   rows.push(SEP("ВСЕГО РАСХОДОВ",r.te,""));
   var ctrl=r.tS+tot-r.te-r.tE,cOk=Math.abs(ctrl)<1;
   rows.push(SEP(cOk?"Контрольная сумма":"Контрольная сумма ⚠",ctrl,cOk?"g":"r"));
-  var st=live?'<span style="color:#16a34a">● live · '+r.cnt+' тр.</span>'
-             :'<span style="color:#9ca3af">данные на '+r.d1+'</span>';
+  var st=live?'<span style="color:#16a34a">● live · '+r.cnt+' тр.</span>':'<span style="color:#9ca3af">данные на '+r.d1+'</span>';
   return'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;">'
     +'<div><div style="font-size:13px;font-weight:600">ДДС — '+r.label+'</div>'
     +'<div style="font-size:10px;color:#9ca3af;margin-top:1px">'+r.d0+' — '+r.d1+'</div></div>'
@@ -301,22 +244,17 @@ function render(r,live){
 
 function renderPoDet(poDet){
   if(!poDet||!poDet.length)return;
-  var d=document.createElement("details");
-  var s=document.createElement("summary");
+  var d=document.createElement("details"),s=document.createElement("summary");
   var tot=poDet.reduce(function(a,p){return a+p.out;},0);
   s.textContent="Прочие расходы ("+poDet.length+" тр. на "+fmtI(tot)+" р.)";
   d.appendChild(s);
-  var t=document.createElement("table");
-  t.style.cssText="width:100%;border-collapse:collapse;margin-top:4px";
+  var t=document.createElement("table");t.style.cssText="width:100%;border-collapse:collapse;margin-top:4px";
   poDet.sort(function(a,b){return b.out-a.out;}).forEach(function(p){
     var tr=document.createElement("tr");
-    tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.date
-      +"</td><td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat
-      +"</td><td style='padding:2px 4px;font-size:10px;text-align:right'>"+fmtI(p.out)+"</td>";
+    tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.date+"</td><td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat+"</td><td style='padding:2px 4px;font-size:10px;text-align:right'>"+fmtI(p.out)+"</td>";
     t.appendChild(tr);
   });
-  d.appendChild(t);
-  document.getElementById("root").appendChild(d);
+  d.appendChild(t);document.getElementById("root").appendChild(d);
 }
 
 function load(reset){
@@ -324,17 +262,11 @@ function load(reset){
   if(reset)clrF(rng.ymd);
   var s=document.getElementById("st");
   if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
-  else{el.innerHTML="<div style='color:#9ca3af;font-size:12px'>ДДС — загрузка…</div>";}
-
-  // Все запросы идут напрямую из браузера — same-origin с Аспро, куки работают
-  var txPath="/api/v1/module/fin/transaction/list?count=50&sort=date&order=asc";
-  var accPath="/api/v1/module/fin/bank_account/list?count=50";
-  var catPath="/api/v1/module/fin/categories/list?count=50";
 
   Promise.all([
-    loadEntity(txPath),
-    loadEntity(accPath),
-    loadEntity(catPath)
+    loadAll("transaction"),
+    loadAll("bank_account"),
+    loadAll("categories")
   ]).then(function(res){
     var txAll=res[0],accs=res[1],cats=res[2];
     var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
@@ -356,7 +288,7 @@ function load(reset){
 
 load(false);
 setInterval(function(){load(false);},5*60*1000);
-console.log("[DDS] started | domain:",DOMAIN);
+console.log("[DDS] started | domain:",DOMAIN,"| token:",!!TOKEN);
 </script>
 </body>
 </html>`;
