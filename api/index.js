@@ -31,12 +31,11 @@ module.exports = async function handler(req, res) {
     var fields = parseForm(raw);
     var domain    = fields['domain']      || '';
     var accountId = fields['account[id]'] || '';
-    console.log('[DDS] POST | domain:', domain, '| account:', accountId);
     return res.status(200).send(html(domain, accountId));
   }
 
   return res.status(200).send('<html><body style="font-family:sans-serif;padding:20px">' +
-    '<h3>&#x2713; ДДС виджет работает</h3><p>Откройте через Аспро.Cloud.</p></body></html>');
+    '<h3>&#x2713; ДДС виджет работает</h3></body></html>');
 };
 
 function esc(s) {
@@ -129,19 +128,49 @@ function getF(ym){try{var s=localStorage.getItem(lk(ym));return s?JSON.parse(s):
 function setF(ym,v,t){try{localStorage.setItem(lk(ym),JSON.stringify({v:v,t:t}));}catch(e){}}
 function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
 
-function api(entity){
-  return fetch("/api/data",{method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({domain:DOMAIN,entity:entity})
-  }).then(function(r){return r.ok?r.json():Promise.reject("HTTP "+r.status);})
-   .then(function(d){return d.items||[];});
+// Загружаем все страницы напрямую из браузера (same-origin, куки работают)
+function loadAllPages(path, onProgress) {
+  return new Promise(function(resolve, reject) {
+    var allItems = [];
+    var page = 1;
+
+    function nextPage() {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'https://'+DOMAIN+path+'&page='+page, true);
+      xhr.withCredentials = true;
+      xhr.onload = function() {
+        if (xhr.status !== 200) { reject('HTTP '+xhr.status); return; }
+        try {
+          var d = JSON.parse(xhr.responseText);
+          var items = d?.response?.items || [];
+          var total = d?.response?.total || 0;
+          allItems = allItems.concat(items);
+          if (onProgress) onProgress(allItems.length, total);
+          if (allItems.length >= total || items.length === 0 || page > 60) {
+            resolve(allItems);
+          } else {
+            page++;
+            nextPage();
+          }
+        } catch(e) { reject(e.message); }
+      };
+      xhr.onerror = function() { reject('network error'); };
+      xhr.send();
+    }
+    nextPage();
+  });
 }
 
-function calc(txMonth,txAll,accs,cats,rng){
+function loadEntity(path) {
+  return loadAllPages(path, null);
+}
+
+function calc(txMonth,accs,cats,rng){
   var aMap={},cMap={};
   accs.forEach(function(a){aMap[a.id]=a.name||"";});
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
+  // Остатки из виджетов на странице
   var vEnd=null,tEnd=null;
   try{
     var domText=window.parent.document.body.innerText||"";
@@ -222,12 +251,10 @@ function SEP(l,v,cls){
   if(cls==="g"&&v>0)c="color:#16a34a";
   if(cls==="r"&&v<0)c="color:#dc2626";
   var s="padding:4px 6px;font-weight:600;border-top:1px solid #e5e7eb";
-  var s2=s+";text-align:right;white-space:nowrap"+(c?";"+c:"");
-  return"<tr><td style='"+s+"'>"+l+"</td><td style='"+s2+"'>"+n+"</td></tr>";
+  return"<tr><td style='"+s+"'>"+l+"</td><td style='"+s+";text-align:right;white-space:nowrap"+(c?";"+c:"")+"'>"+n+"</td></tr>";
 }
 function SEC(l){
-  var s="padding:7px 6px 2px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-top:1px solid #e5e7eb";
-  return"<tr><td colspan='2' style='"+s+"'>"+l+"</td></tr>";
+  return"<tr><td colspan='2' style='padding:7px 6px 2px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-top:1px solid #e5e7eb'>"+l+"</td></tr>";
 }
 
 function render(r,live){
@@ -297,30 +324,32 @@ function load(reset){
   if(reset)clrF(rng.ymd);
   var s=document.getElementById("st");
   if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
+  else{el.innerHTML="<div style='color:#9ca3af;font-size:12px'>ДДС — загрузка…</div>";}
+
+  // Все запросы идут напрямую из браузера — same-origin с Аспро, куки работают
+  var txPath="/api/v1/module/fin/transaction/list?count=50&sort=date&order=asc";
+  var accPath="/api/v1/module/fin/bank_account/list?count=50";
+  var catPath="/api/v1/module/fin/categories/list?count=50";
 
   Promise.all([
-    api("transaction"),
-    api("bank_account"),
-    api("categories")
+    loadEntity(txPath),
+    loadEntity(accPath),
+    loadEntity(catPath)
   ]).then(function(res){
     var txAll=res[0],accs=res[1],cats=res[2];
     var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
     console.log("[DDS] tx:",txAll.length,"month:",txM.length,"accs:",accs.length,"cats:",cats.length);
     if(txM.length){
-      var r=calc(txM,txAll,accs,cats,rng);
+      var r=calc(txM,accs,cats,rng);
       el.innerHTML=render(r,true);
       renderPoDet(r.poDet);
     }else{
-      el.innerHTML="<div style='padding:12px;color:#9ca3af'>Нет данных за "+rng.label
-        +"<br><small>tx всего: "+txAll.length+", за месяц: "+txM.length
-        +"<br>диапазон: "+rng.s0+" — "+rng.s1+"</small></div>";
+      el.innerHTML="<div style='padding:12px;color:#9ca3af'>Нет данных за "+rng.label+"</div>";
     }
     var b=document.getElementById("btn");if(b)b.onclick=function(){load(false);};
     var rb=document.getElementById("rst");if(rb)rb.onclick=function(){load(true);};
   }).catch(function(e){
-    var s2=document.getElementById("st");
-    if(s2){s2.textContent="ошибка "+e;s2.style.color="#dc2626";}
-    else{el.innerHTML="<div style='padding:12px;color:#dc2626'>Ошибка: "+e+"</div>";}
+    el.innerHTML="<div style='padding:12px;color:#dc2626'>Ошибка: "+e+"</div>";
     console.error("[DDS]",e);
   });
 }
