@@ -269,16 +269,37 @@ function loadData(resetStart){
 
     if(monthTx.length>0){
       var rep=buildReport(monthTx,accountItems,catItems,range);
+
+      // Диагностика: если всё нули — показываем имена счетов из API
+      var hasData=rep.pjIn||rep.pjOut||rep.pr||rep.zp||rep.km||rep.bk||rep.ins||rep.po;
+      if(!hasData){
+        // Собираем уникальные имена счетов из транзакций текущего месяца
+        var accountMap2={};
+        accountItems.forEach(function(a){accountMap2[a.id]=a.name||'';});
+        var usedAccs={};
+        monthTx.forEach(function(tx){
+          var n=accountMap2[tx.org_account_id]||('id:'+tx.org_account_id);
+          usedAccs[n]=1;
+        });
+        var accList=Object.keys(usedAccs).sort().join('<br>');
+        var catMap2={};
+        catItems.forEach(function(c){catMap2[c.id]=c.name||'';});
+        var usedCats={};
+        monthTx.slice(0,50).forEach(function(tx){
+          var n=catMap2[tx.category_id]||('id:'+tx.category_id);
+          usedCats[n]=1;
+        });
+        var catList=Object.keys(usedCats).sort().join('<br>');
+        d.innerHTML='<div style="padding:12px;font-size:11px;color:#444;line-height:1.6;">'
+          +'<b>290 транзакций найдено, но фильтр не пропускает.</b><br><br>'
+          +'<b>Счета в API:</b><br>'+accList
+          +'<br><br><b>Статьи учёта:</b><br>'+catList
+          +'</div>';
+        return;
+      }
       d.innerHTML=renderHTML(rep,true);
     }else{
-      // Диагностика
-      var sample=txItems.slice(0,2).map(function(tx){
-        return tx.date+'|acc:'+tx.org_account_id+'|cat:'+tx.category_id+'|in:'+tx.income+'|out:'+tx.outcome;
-      }).join(' / ');
-      d.innerHTML='<div style="padding:12px;font-size:11px;color:#666;">'
-        +'Транзакций за '+range.label+': '+monthTx.length+' из '+txItems.length+' всего.<br>'
-        +(sample?'Примеры: '+sample:'')
-        +'<br>Диапазон: '+range.startDate+' — '+range.endDate+'</div>';
+      d.innerHTML='<div style="padding:12px;color:#9ca3af;font-size:12px;">Нет транзакций за '+range.label+'</div>';
     }
     var btn=document.getElementById('dds-btn');if(btn)btn.onclick=function(){loadData(false);};
     var rst=document.getElementById('dds-reset');if(rst)rst.onclick=function(){loadData(true);};
