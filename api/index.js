@@ -120,41 +120,16 @@ function getF(ym){try{var s=localStorage.getItem(lk(ym));return s?JSON.parse(s):
 function setF(ym,v,t){try{localStorage.setItem(lk(ym),JSON.stringify({v:v,t:t}));}catch(e){}}
 function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
 
-// Запросы к API Аспро через XHR с Bearer токеном
-function loadAll(entity, stopDate) {
-  // stopDate: останавливаемся когда все даты на странице раньше этой (только для transaction)
-  var base="https://"+DOMAIN+"/api/v1/module/fin/"+entity+"/list?count=50";
-  // Для транзакций берём от новых к старым, останавливаемся на нужном месяце
-  if(entity==="transaction") base+="&sort=date&order=desc";
-
-  return new Promise(function(resolve, reject){
-    var all=[], page=1;
-    function next(){
-      var xhr=new XMLHttpRequest();
-      xhr.open("GET", base+"&page="+page, true);
-      xhr.withCredentials=true;
-      if(TOKEN) xhr.setRequestHeader("Authorization","Bearer "+TOKEN);
-      xhr.onload=function(){
-        if(xhr.status!==200){reject("HTTP "+xhr.status);return;}
-        try{
-          var d=JSON.parse(xhr.responseText);
-          var items=(d&&d.response&&d.response.items)||[];
-          var total=(d&&d.response&&d.response.total)||0;
-          all=all.concat(items);
-          console.log("[DDS] "+entity+" p"+page+": "+all.length+"/"+total);
-          // Для транзакций — останавливаемся когда дошли до дат раньше stopDate
-          if(stopDate && entity==="transaction" && items.length>0){
-            var lastDate=items[items.length-1].date||"";
-            if(lastDate<stopDate){resolve(all);return;}
-          }
-          if(all.length>=total||items.length===0||page>60){resolve(all);}
-          else{page++;next();}
-        }catch(e){reject(e.message);}
-      };
-      xhr.onerror=function(){reject("network error p"+page);};
-      xhr.send();
-    }
-    next();
+// Запросы через серверный прокси /api/data
+function loadAll(entity) {
+  return fetch("/api/data", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({domain: DOMAIN, entity: entity})
+  }).then(function(r) {
+    return r.ok ? r.json() : Promise.reject("HTTP " + r.status);
+  }).then(function(d) {
+    return d.items || [];
   });
 }
 
@@ -280,7 +255,7 @@ function load(reset){
   if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
 
   Promise.all([
-    loadAll("transaction", rng.s0),  // останавливаемся когда дошли до начала месяца
+    loadAll("transaction"),
     loadAll("bank_account"),
     loadAll("categories")
   ]).then(function(res){
