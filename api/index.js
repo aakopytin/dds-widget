@@ -297,6 +297,28 @@ function loadData(resetStart){
     if(monthTx.length>0){
       var rep=buildReport(monthTx,accountItems,catItems,range);
 
+      var hasData=rep.pjIn||rep.pjOut||rep.pr||rep.zp||rep.km||rep.bk||rep.ins||rep.po;
+      if(!hasData){
+        // Показываем первую транзакцию целиком для диагностики
+        var first=monthTx[0]||{};
+        var accountMap2={};accountItems.forEach(function(a){accountMap2[a.id]=a.name||'';});
+        var catMap2={};catItems.forEach(function(c){catMap2[c.id]=c.name||'';});
+        // Показываем поля первых 3 транзакций
+        var rows=monthTx.slice(0,3).map(function(tx){
+          return 'date:'+tx.date
+            +' | acc_id:'+tx.org_account_id+' ('+accountMap2[tx.org_account_id]+')'
+            +' | cat_id:'+tx.category_id+' ('+catMap2[tx.category_id]+')'
+            +' | in:'+tx.income+' | out:'+tx.outcome
+            +' | type:'+tx.type;
+        }).join('<br>');
+        // Все ключи первой транзакции
+        var keys=Object.keys(first).join(', ');
+        d.innerHTML='<div style="padding:8px;font-size:10px;color:#444;line-height:1.8;word-break:break-all;">'
+          +'<b>Фильтр не пропускает. Поля транзакции:</b><br>'+keys
+          +'<br><br><b>Первые 3 транзакции:</b><br>'+rows
+          +'</div>';
+        return;
+      }
       d.innerHTML=renderHTML(rep,true);
     }else{
       d.innerHTML='<div style="padding:12px;color:#9ca3af;font-size:12px;">Нет транзакций за '+range.label+'</div>';
