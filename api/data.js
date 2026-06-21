@@ -1,6 +1,4 @@
 // api/data.js — серверный прокси к публичному API Аспро
-// Использует ASPRO_API_KEY из переменных окружения Vercel
-// Публичный API: https://2cec.aspro.cloud/api/v1/module/fin/...
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -13,22 +11,30 @@ module.exports = async function handler(req, res) {
   const apiKey = process.env.ASPRO_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'ASPRO_API_KEY not set' });
 
-  const { domain, entity } = req.body || {};
+  const { domain, entity, dateFrom, dateTo } = req.body || {};
   if (!domain || !entity) return res.status(400).json({ error: 'Missing domain or entity' });
 
-  // Белый список разрешённых сущностей
   const ALLOWED = ['transaction', 'bank_account', 'categories'];
   if (!ALLOWED.includes(entity)) return res.status(403).json({ error: 'Entity not allowed' });
 
   try {
-    // Загружаем все записи постранично
     const allItems = [];
     let page = 1;
-    const perPage = 100;
+    const perPage = 500; // максимум за запрос
 
     while (true) {
-      const url = `https://${domain}/api/v1/module/fin/${entity}/list`
+      // Для транзакций фильтруем по дате чтобы не тащить всю историю
+      let url = `https://${domain}/api/v1/module/fin/${entity}/list`
         + `?api_key=${apiKey}&count=${perPage}&page=${page}`;
+
+      // Добавляем фильтр по дате если передан
+      if (entity === 'transaction') {
+        // Берём текущий год чтобы захватить fixed_balance_date транзакции
+        const year = new Date().getFullYear();
+        const from = dateFrom || `${year}-01-01`;
+        const to   = dateTo   || `${year}-12-31`;
+        url += `&filter[date][from]=${from}&filter[date][to]=${to}`;
+      }
 
       const r = await fetch(url);
       if (!r.ok) {
@@ -42,9 +48,11 @@ module.exports = async function handler(req, res) {
       allItems.push(...items);
 
       const total = data?.response?.total || 0;
+      console.log(`[DDS] ${entity} page ${page}: ${items.length} items, total ${total}`);
+
       if (allItems.length >= total || items.length === 0) break;
       page++;
-      if (page > 50) break; // защита от бесконечного цикла
+      if (page > 20) break; // защита
     }
 
     return res.status(200).json({ items: allItems });
