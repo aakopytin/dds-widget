@@ -1,15 +1,14 @@
-// api/index.js — Vercel Serverless Function (CommonJS)
-// Аспро открывает iframe через POST-форму и передаёт auth[access_token].
-// Функция читает токен и отдаёт HTML виджета.
+// api/index.js — Vercel Serverless Function
+// Принимает POST от Аспро, отдаёт HTML виджета.
 
 module.exports.config = { api: { bodyParser: false } };
 
 function readBody(req) {
   return new Promise(function(resolve) {
     var data = '';
-    req.on('data', function(chunk) { data += chunk.toString(); });
-    req.on('end',  function() { resolve(data); });
-    req.on('error',function() { resolve(''); });
+    req.on('data', function(c) { data += c.toString(); });
+    req.on('end',  function()  { resolve(data); });
+    req.on('error',function()  { resolve(''); });
   });
 }
 
@@ -19,9 +18,9 @@ function parseForm(body) {
   body.split('&').forEach(function(pair) {
     var idx = pair.indexOf('=');
     if (idx === -1) return;
-    var key = decodeURIComponent(pair.slice(0, idx).replace(/\+/g, ' '));
-    var val = decodeURIComponent(pair.slice(idx + 1).replace(/\+/g, ' '));
-    result[key] = val;
+    var k = decodeURIComponent(pair.slice(0, idx).replace(/\+/g, ' '));
+    var v = decodeURIComponent(pair.slice(idx + 1).replace(/\+/g, ' '));
+    result[k] = v;
   });
   return result;
 }
@@ -40,16 +39,12 @@ module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (req.method === 'POST') {
-    var rawBody = await readBody(req);
-    var fields  = parseForm(rawBody);
-
-    var domain      = fields['domain']             || '';
-    var accessToken = fields['auth[access_token]'] || '';
-    var accountId   = fields['account[id]']        || '';
-
-    console.log('[DDS] POST | domain:', domain, '| accountId:', accountId, '| hasToken:', !!accessToken);
-
-    return res.status(200).send(widgetHTML(domain, accessToken, accountId));
+    var raw    = await readBody(req);
+    var fields = parseForm(raw);
+    var domain    = fields['domain']    || '';
+    var accountId = fields['account[id]'] || '';
+    console.log('[DDS] POST | domain:', domain, '| accountId:', accountId);
+    return res.status(200).send(widgetHTML(domain, accountId));
   }
 
   return res.status(200).send(
@@ -60,9 +55,8 @@ module.exports = async function handler(req, res) {
   );
 };
 
-function widgetHTML(domain, accessToken, accountId) {
+function widgetHTML(domain, accountId) {
   var d  = esc(domain);
-  var t  = esc(accessToken);
   var id = esc(accountId);
 
   return `<!DOCTYPE html>
@@ -80,24 +74,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-siz
 <div id="root" style="color:#9ca3af;font-size:12px">ДДС — загрузка…</div>
 <script>
 var DOMAIN='${d}';
-var ACCESS_TOKEN='${t}';
 var ACCOUNT_ID='${id}';
 
-// Запросы идут через /api/data — серверный прокси на Vercel,
-// который сам обращается к Аспро (обходит CORS)
-function apiFetch(endpoint) {
-  return fetch('/api/data', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ domain: DOMAIN, token: ACCESS_TOKEN, endpoint: endpoint })
-  }).then(function(r) {
-    return r.ok ? r.json() : Promise.reject('HTTP ' + r.status);
-  });
-}
-
 // ── Константы (идентичны dds_tm_v8.js) ───────────────────────────────────────
-var VSIP_ACCS={'ВСИП - Альфа ВСИП':1,'ВСИП - ВСИП Депозиты':1,'ВСИП - Счет ВТБ':1,'ВСИП - Счет РХСБ':1,'ВСИП - Счет Сбербанк':1,'ВСИП - Счет Совкомбанк':1,'ВСИП - Расчетный счет  8876':1,'ВСИП - Расчетный счет 8876':1};
-var TT_ACCS={'ООО &quot;ТИМ-ТРЕЙД&quot; - Альфа ТТ (ВСИП)':1};
+// Фильтрация по именам счетов и статьям учёта
+var VSIP_NAMES={'ВСИП - Альфа ВСИП':1,'ВСИП - ВСИП Депозиты':1,'ВСИП - Счет ВТБ':1,'ВСИП - Счет РХСБ':1,'ВСИП - Счет Сбербанк':1,'ВСИП - Счет Совкомбанк':1,'ВСИП - Расчетный счет  8876':1,'ВСИП - Расчетный счет 8876':1};
+var TT_NAMES={'ООО "ТИМ-ТРЕЙД" - Альфа ТТ (ВСИП)':1};
 var OFF_PROJ={24:1,26:1,27:1};
 var PROJ_NAMES={1:'Кемерово',3:'Южно-Сахалинск',13:'Барнаул',12:'Киров',23:'Сыктывкар',9:'Рузаевка',6:'Десногорск',100:'Центральный договор',101:'Прочие проекты'};
 var PROJ_ORDER=[1,3,13,12,23,9,6,100,101];
@@ -105,49 +87,129 @@ var PROJ_GROUP={2:100,18:100,19:100,29:100,30:100,31:100,32:100,33:100,17:101,20
 var ART_CAT={'Перевод между счетами (поступление)':'skip','Перевод между счетами (списание)':'skip','Получение кредита':'skip','Выплата кредита':'skip','Оказание услуг':'pjIn','Возврат ДС. за заказы':'refund','Проценты к получению':'pr','Зарплата':'zp','Командировки':'km','Страхование':'ins','Расходы на услуги банков':'bk','Прочее':'po','Аренда':'po','Бухгалтерия':'po','Интернет и связь':'po','Налоги и взносы':'po','Налоги - НДС':'po','Расходы на лизинг':'po','Проценты к уплате':'po','Оборудование':'po','Возвраты клиентам':'po','Нераспределенные':'po','Нераспределенные (списание)':'po','Тесты и испытания':'po','Услуги по сертификации':'po','Составление исполнительной документации':'po'};
 
 // ── Утилиты ───────────────────────────────────────────────────────────────────
-function fmt(v){if(!v&&v!==0)return'—';if(v===0)return'—';return new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);}
-function parseNum(s){if(!s)return 0;return parseFloat(String(s).replace(/&nbsp;/g,' ').replace(/&thinsp;/g,' ').replace(/&#\\d+;/g,'').replace(/[^\\d,.\\-]/g,'').replace(',','.'))||0;}
-function d2y(s){if(!s||s.length!==10)return'';return s.slice(6)+'-'+s.slice(3,5)+'-'+s.slice(0,2);}
-function getRange(){var now=new Date(),y=now.getFullYear(),m=now.getMonth(),p=function(n){return n<10?'0'+n:''+n;},end=Math.min(now.getDate(),new Date(y,m+1,0).getDate()),mo=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];return{ymd:y+'-'+p(m+1),start:y+'-'+p(m+1)+'-01',end:y+'-'+p(m+1)+'-'+p(end),firstDay:'01.'+p(m+1)+'.'+y,lastDay:p(end)+'.'+p(m+1)+'.'+y,label:mo[m]+' '+y};}
+function fmt(v){if(!v&&v!==0||v===0)return'—';return new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);}
+function parseNum(s){if(!s)return 0;return parseFloat(String(s).replace(/[^\\d.\\-]/g,''))||0;}
+function getRange(){
+  var now=new Date(),y=now.getFullYear(),m=now.getMonth();
+  var p=function(n){return n<10?'0'+n:''+n;};
+  var end=Math.min(now.getDate(),new Date(y,m+1,0).getDate());
+  var mo=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  return{
+    ymd:y+'-'+p(m+1),
+    startDate:y+'-'+p(m+1)+'-01',
+    endDate:y+'-'+p(m+1)+'-'+p(end),
+    firstDay:'01.'+p(m+1)+'.'+y,
+    lastDay:p(end)+'.'+p(m+1)+'.'+y,
+    label:mo[m]+' '+y
+  };
+}
 
 function lsKey(ym){return'dds8_'+ACCOUNT_ID+'_'+ym;}
 function getFixed(ym){try{var s=localStorage.getItem(lsKey(ym));return s?JSON.parse(s):null;}catch(e){return null;}}
 function setFixed(ym,vsip,tt){try{localStorage.setItem(lsKey(ym),JSON.stringify({vsip:vsip,tt:tt}));}catch(e){}}
 function clearFixed(ym){try{localStorage.removeItem(lsKey(ym));}catch(e){}}
 
-function readBalance(group){
-  var text='';try{text=window.parent.document.body.innerText||'';}catch(e){return null;}
-  var m;
-  if(group==='vsip'){m=text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*p\\.\\s*\\n\\s*ВСИП/);if(!m)m=text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*р\\.\\s*\\n\\s*ВСИП/);}
-  else{m=text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*p\\.\\s*\\n\\s*ООО/);if(!m)m=text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*р\\.\\s*\\n\\s*ООО/);}
-  return m?parseNum(m[1]):null;
+// ── Запросы через серверный прокси /api/data ──────────────────────────────────
+function loadEntity(entity){
+  return fetch('/api/data',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({domain:DOMAIN,entity:entity})
+  }).then(function(r){return r.ok?r.json():Promise.reject('HTTP '+r.status);})
+    .then(function(d){return d.items||[];});
 }
 
-function buildReport(txRows,payinRows,range){
-  var txProjMap={};
-  (payinRows||[]).forEach(function(row){var idM=String(row[0]||'').match(/new_create_payin\\/(\\d+)/),pidM=String(row[8]||'').match(/project\\/(\\d+)/);if(idM&&pidM)txProjMap[+idM[1]]=+pidM[1];});
-  var pr=0,zp=0,km=0,bk=0,ins=0,po=0,pjIn=0,pjOut=0,refund=0,pjInByProj={},pjOutByProj={},vsipNetto=0,ttNetto=0;
-  txRows.forEach(function(row){
-    var dt=d2y(row[0]);if(!dt||dt<range.start||dt>range.end)return;
-    var inc=parseNum(row[1]),out=parseNum(row[2]),acc=row[8],art=row[9];
-    var isVsip=!!VSIP_ACCS[acc],isTT=!!TT_ACCS[acc];if(!isVsip&&!isTT)return;
-    if(isVsip)vsipNetto+=inc-out;if(isTT)ttNetto+=inc-out;
-    var txIdM=String(row[12]||'').match(/\\/(\\d+)$/),txId=txIdM?+txIdM[1]:0;
-    var rawPid=txId?txProjMap[txId]:0,pid=(rawPid&&PROJ_GROUP[rawPid])?PROJ_GROUP[rawPid]:rawPid;
-    var pidOk=pid&&!!PROJ_NAMES[pid],pidOff=rawPid&&!!OFF_PROJ[rawPid];
-    var cat=ART_CAT[art];if(cat==='skip')return;
-    if(inc>0){if(cat==='pr')pr+=inc;else if(cat==='pjIn'&&pidOk){pjIn+=inc;pjInByProj[pid]=(pjInByProj[pid]||0)+inc;}else if(cat==='refund'&&pidOk)refund+=inc;}
-    if(out>0){if(cat==='zp')zp+=out;else if(cat==='km')km+=out;else if(cat==='ins')ins+=out;else if(cat==='bk')bk+=out;else if(cat==='po')po+=out;else if(!pidOff){pjOut+=out;if(pid&&pidOk)pjOutByProj[pid]=(pjOutByProj[pid]||0)+out;}}
+// ── Построение отчёта ─────────────────────────────────────────────────────────
+function buildReport(txItems, accountItems, catItems, range){
+  // Строим карты: id → name для счетов и статей
+  var accountMap={};
+  accountItems.forEach(function(a){ accountMap[a.id]=a.name||''; });
+
+  var catMap={};
+  catItems.forEach(function(c){ catMap[c.id]=c.name||''; });
+
+  var pr=0,zp=0,km=0,bk=0,ins=0,po=0,pjIn=0,pjOut=0,refund=0;
+  var pjInByProj={},pjOutByProj={};
+  var vsipNetto=0,ttNetto=0;
+
+  txItems.forEach(function(tx){
+    // Фильтр по дате
+    var date=tx.date||'';
+    if(!date||date<range.startDate||date>range.endDate)return;
+
+    var inc=parseNum(tx.income)||0;
+    var out=parseNum(tx.outcome)||0;
+    var accName=accountMap[tx.org_account_id]||'';
+    var catName=catMap[tx.category_id]||'';
+    var projId=tx.project_id||0;
+
+    var isVsip=!!VSIP_NAMES[accName];
+    var isTT=!!TT_NAMES[accName];
+    if(!isVsip&&!isTT)return;
+
+    if(isVsip)vsipNetto+=inc-out;
+    if(isTT)ttNetto+=inc-out;
+
+    // Группировка проекта
+    var rawPid=projId;
+    var pid=(rawPid&&PROJ_GROUP[rawPid])?PROJ_GROUP[rawPid]:rawPid;
+    var pidOk=pid&&!!PROJ_NAMES[pid];
+    var pidOff=rawPid&&!!OFF_PROJ[rawPid];
+
+    var cat=ART_CAT[catName];
+    if(cat==='skip')return;
+
+    if(inc>0){
+      if(cat==='pr')pr+=inc;
+      else if(cat==='pjIn'&&pidOk){pjIn+=inc;pjInByProj[pid]=(pjInByProj[pid]||0)+inc;}
+      else if(cat==='refund'&&pidOk)refund+=inc;
+    }
+    if(out>0){
+      if(cat==='zp')zp+=out;
+      else if(cat==='km')km+=out;
+      else if(cat==='ins')ins+=out;
+      else if(cat==='bk')bk+=out;
+      else if(cat==='po')po+=out;
+      else if(!pidOff){pjOut+=out;if(pid&&pidOk)pjOutByProj[pid]=(pjOutByProj[pid]||0)+out;}
+    }
   });
-  var vsipEnd=readBalance('vsip'),ttEnd=readBalance('tt');
+
+  // Остатки из DOM родителя (если same-origin)
+  var vsipEnd=null,ttEnd=null;
+  try{
+    var text=window.parent.document.body.innerText||'';
+    var mv=text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*p\\.\\s*\\n\\s*ВСИП/)||text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*р\\.\\s*\\n\\s*ВСИП/);
+    var mt=text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*p\\.\\s*\\n\\s*ООО/)||text.match(/([-\\d][\\d\\s\\u00a0]*(?:,\\d+)?)\\s*р\\.\\s*\\n\\s*ООО/);
+    if(mv)vsipEnd=parseNum(mv[1].replace(/[\\s\\u00a0]/g,'').replace(',','.'));
+    if(mt)ttEnd=parseNum(mt[1].replace(/[\\s\\u00a0]/g,'').replace(',','.'));
+  }catch(e){}
+
   var fixed=getFixed(range.ymd),vsipStart,ttStart;
-  if(fixed){vsipStart=fixed.vsip;ttStart=fixed.tt;if(vsipEnd===null)vsipEnd=vsipStart+vsipNetto;if(ttEnd===null)ttEnd=ttStart+ttNetto;}
-  else if(vsipEnd!==null&&ttEnd!==null){vsipStart=vsipEnd-vsipNetto;ttStart=ttEnd-ttNetto;setFixed(range.ymd,vsipStart,ttStart);}
-  else{vsipStart=0;ttStart=0;vsipEnd=vsipNetto;ttEnd=ttNetto;}
+  if(fixed){
+    vsipStart=fixed.vsip;ttStart=fixed.tt;
+    if(vsipEnd===null)vsipEnd=vsipStart+vsipNetto;
+    if(ttEnd===null)ttEnd=ttStart+ttNetto;
+  }else if(vsipEnd!==null&&ttEnd!==null){
+    vsipStart=vsipEnd-vsipNetto;ttStart=ttEnd-ttNetto;
+    setFixed(range.ymd,vsipStart,ttStart);
+  }else{
+    vsipStart=0;ttStart=0;
+    vsipEnd=vsipNetto;ttEnd=ttNetto;
+  }
+
   var te=pjOut+zp+km+bk+ins+po;
-  return{vsipStart:vsipStart,ttStart:ttStart,vsipEnd:vsipEnd,ttEnd:ttEnd,totalStart:vsipStart+ttStart,totalEnd:(vsipEnd||0)+(ttEnd||0),pr:pr,pjIn:pjIn,refund:refund,pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,po:po,te:te,pjInByProj:pjInByProj,pjOutByProj:pjOutByProj,cnt:txRows.length,firstDay:range.firstDay,lastDay:range.lastDay,label:range.label,ymd:range.ymd};
+  return{
+    vsipStart:vsipStart,ttStart:ttStart,vsipEnd:vsipEnd,ttEnd:ttEnd,
+    totalStart:vsipStart+ttStart,totalEnd:(vsipEnd||0)+(ttEnd||0),
+    pr:pr,pjIn:pjIn,refund:refund,
+    pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,po:po,te:te,
+    pjInByProj:pjInByProj,pjOutByProj:pjOutByProj,
+    cnt:txItems.length,
+    firstDay:range.firstDay,lastDay:range.lastDay,label:range.label,ymd:range.ymd
+  };
 }
 
+// ── HTML таблица ──────────────────────────────────────────────────────────────
 function TR(l,v,o){o=o||{};var n=fmt(v),c=o.color||(o.green&&v>0?'#16a34a':o.negRed&&v<0?'#dc2626':'');if(o.muted)c='#9ca3af';var s2='text-align:right;white-space:nowrap;padding:5px 6px;font-size:12px;'+(c?'color:'+c+';':''),s1='padding:5px 6px;font-size:12px;'+(o.indent?'padding-left:18px;':''),sr=(o.sep?'border-top:1px solid #e5e7eb;':'')+(o.bold?'font-weight:600;':'');return'<tr style="'+sr+'"><td style="'+s1+'">'+l+'</td><td style="'+s2+'">'+n+'</td></tr>';}
 function SEC(t){return'<tr><td colspan="2" style="padding:9px 6px 3px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-top:1px solid #e5e7eb;">'+t+'</td></tr>';}
 
@@ -180,37 +242,43 @@ function renderHTML(r,live){
   var ctrl=r.totalStart+totalIn-r.te-r.totalEnd,cOk=Math.abs(ctrl)<1;
   rows.push(TR(cOk?'Контрольная сумма':'Контрольная сумма ⚠',ctrl,{sep:true,color:cOk?'#16a34a':'#dc2626'}));
   var st=live?'<span style="color:#16a34a">● live · '+r.cnt+' тр.</span>':'<span style="color:#9ca3af">данные на '+r.lastDay+'</span>';
-  return '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb;"><div><div style="font-size:14px;font-weight:600;">ДДС — '+r.label+'</div><div style="font-size:11px;color:#9ca3af;margin-top:2px;">'+r.firstDay+' — '+r.lastDay+'</div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0;"><span id="dds-status" style="font-size:11px;">'+st+'</span><button id="dds-btn" style="background:none;border:1px solid #d1d5db;color:#6b7280;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;">↻</button><button id="dds-reset" style="background:none;border:1px solid #d1d5db;color:#9ca3af;font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;">⟳₀</button></div></div><table style="width:100%;border-collapse:collapse;">'+rows.join('')+'</table><div style="margin-top:8px;font-size:10px;color:#9ca3af;">обновлено: '+new Date().toLocaleTimeString('ru-RU')+'</div>';
+  return'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb;"><div><div style="font-size:14px;font-weight:600;">ДДС — '+r.label+'</div><div style="font-size:11px;color:#9ca3af;margin-top:2px;">'+r.firstDay+' — '+r.lastDay+'</div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0;"><span id="dds-status" style="font-size:11px;">'+st+'</span><button id="dds-btn" style="background:none;border:1px solid #d1d5db;color:#6b7280;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;">↻</button><button id="dds-reset" style="background:none;border:1px solid #d1d5db;color:#9ca3af;font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;">⟳₀</button></div></div><table style="width:100%;border-collapse:collapse;">'+rows.join('')+'</table><div style="margin-top:8px;font-size:10px;color:#9ca3af;">обновлено: '+new Date().toLocaleTimeString('ru-RU')+'</div>';
 }
 
+// ── Загрузка ──────────────────────────────────────────────────────────────────
 function loadData(resetStart){
   var d=document.getElementById('root'),range=getRange();
   if(resetStart)clearFixed(range.ymd);
   var st=document.getElementById('dds-status');
   if(st){st.textContent='загрузка…';st.style.color='#9ca3af';}
+
+  // Загружаем параллельно: транзакции + справочники счетов и статей
   Promise.all([
-    apiFetch('/_module/fin/rest/transaction/list/'),
-    apiFetch('/_module/fin/rest/payin/list/').catch(function(){return null;})
+    loadEntity('transaction'),
+    loadEntity('bank_account'),
+    loadEntity('categories')
   ]).then(function(res){
-    var rows=res[0].data||[];
-    console.log('[DDS] tx rows:',rows.length,'first row:',rows[0]);
-    if(rows.length>0){
-      var rep=buildReport(rows,res[1]?res[1].data:[],range);
-      // Диагностика если все отфильтровалось
-      if(rep.cnt===0||(!rep.pjIn&&!rep.pjOut&&!rep.pr&&!rep.zp)){
-        var sample=rows.slice(0,3).map(function(r){return'['+r[0]+' acc='+r[8]+' art='+r[9]+']';}).join(', ');
-        d.innerHTML='<div style="padding:12px;font-size:11px;color:#666;">'
-          +'Данных '+(rows.length)+' строк, но все отфильтрованы.<br>'
-          +'Примеры: '+sample+'<br>'
-          +'Диапазон: '+range.start+' — '+range.end+'</div>';
-        return;
-      }
+    var txItems=res[0], accountItems=res[1], catItems=res[2];
+
+    // Фильтруем транзакции по текущему месяцу
+    var monthTx=txItems.filter(function(tx){
+      return tx.date&&tx.date>=range.startDate&&tx.date<=range.endDate;
+    });
+
+    console.log('[DDS] tx total:',txItems.length,'month:',monthTx.length,'accounts:',accountItems.length,'cats:',catItems.length);
+
+    if(monthTx.length>0){
+      var rep=buildReport(monthTx,accountItems,catItems,range);
       d.innerHTML=renderHTML(rep,true);
-    }
-    else{
-      // Показываем что пришло от API для диагностики
-      var raw=JSON.stringify(res[0]).slice(0,200);
-      d.innerHTML='<div style="padding:12px;font-size:11px;color:#666;">API вернул пустой массив.<br><small>'+raw+'</small></div>';
+    }else{
+      // Диагностика
+      var sample=txItems.slice(0,2).map(function(tx){
+        return tx.date+'|acc:'+tx.org_account_id+'|cat:'+tx.category_id+'|in:'+tx.income+'|out:'+tx.outcome;
+      }).join(' / ');
+      d.innerHTML='<div style="padding:12px;font-size:11px;color:#666;">'
+        +'Транзакций за '+range.label+': '+monthTx.length+' из '+txItems.length+' всего.<br>'
+        +(sample?'Примеры: '+sample:'')
+        +'<br>Диапазон: '+range.startDate+' — '+range.endDate+'</div>';
     }
     var btn=document.getElementById('dds-btn');if(btn)btn.onclick=function(){loadData(false);};
     var rst=document.getElementById('dds-reset');if(rst)rst.onclick=function(){loadData(true);};
@@ -224,7 +292,7 @@ function loadData(resetStart){
 
 loadData(false);
 setInterval(function(){loadData(false);},5*60*1000);
-console.log('[DDS widget] started | domain:',DOMAIN,'| token:',!!ACCESS_TOKEN);
+console.log('[DDS widget] started | domain:',DOMAIN);
 </script>
 </body>
 </html>`;
