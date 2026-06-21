@@ -31,9 +31,8 @@ module.exports = async function handler(req, res) {
     var fields = parseForm(raw);
     var domain    = fields['domain']      || '';
     var accountId = fields['account[id]'] || '';
-    var apiKey    = process.env.ASPRO_API_KEY || '';
     console.log('[DDS] POST | domain:', domain, '| account:', accountId);
-    return res.status(200).send(html(domain, accountId, apiKey));
+    return res.status(200).send(html(domain, accountId));
   }
 
   return res.status(200).send('<html><body style="font-family:sans-serif;padding:20px">' +
@@ -44,7 +43,7 @@ function esc(s) {
   return String(s||'').replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
 }
 
-function html(domain, accountId, apiKey) {
+function html(domain, accountId) {
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -67,7 +66,6 @@ details table td{font-size:10px;color:#555;padding:2px 4px}
 <script>
 var DOMAIN="${esc(domain)}";
 var ACCOUNT_ID="${esc(accountId)}";
-var API_KEY="${esc(apiKey)}";
 
 var VSIP={
   "Альфа ВСИП":1,"ВСИП Депозиты":1,"Счет ВТБ":1,
@@ -122,7 +120,6 @@ function getRange(){
           "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
   return{ymd:y+"-"+p(m+1),s0:y+"-"+p(m+1)+"-01",
          s1:y+"-"+p(m+1)+"-"+p(end),
-         y0:y+"-01-01",y1:y+"-12-31",
          d0:"01."+p(m+1)+"."+y,d1:p(end)+"."+p(m+1)+"."+y,
          label:mo[m]+" "+y};
 }
@@ -132,29 +129,19 @@ function getF(ym){try{var s=localStorage.getItem(lk(ym));return s?JSON.parse(s):
 function setF(ym,v,t){try{localStorage.setItem(lk(ym),JSON.stringify({v:v,t:t}));}catch(e){}}
 function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
 
-// Запросы напрямую к API Аспро из браузера (api_key в параметре)
-function apiGet(entity, extraParams) {
-  var year = new Date().getFullYear();
-  var url = "https://"+DOMAIN+"/api/v1/module/fin/"+entity+"/list"
-    + "?api_key="+API_KEY+"&count=500&page=1";
-  if (extraParams) url += extraParams;
-
-  return fetch(url, {method:"GET"})
-    .then(function(r){ return r.ok ? r.json() : Promise.reject("HTTP "+r.status); })
-    .then(function(d){
-      var items = (d.response||{}).items || [];
-      var total = (d.response||{}).total || 0;
-      console.log("[DDS] "+entity+": "+items.length+"/"+total);
-      return items;
-    });
+function api(entity){
+  return fetch("/api/data",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({domain:DOMAIN,entity:entity})
+  }).then(function(r){return r.ok?r.json():Promise.reject("HTTP "+r.status);})
+   .then(function(d){return d.items||[];});
 }
 
-function calc(txMonth, txAll, accs, cats, rng){
+function calc(txMonth,txAll,accs,cats,rng){
   var aMap={},cMap={};
   accs.forEach(function(a){aMap[a.id]=a.name||"";});
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
-  // Остатки из DOM родителя
   var vEnd=null,tEnd=null;
   try{
     var domText=window.parent.document.body.innerText||"";
@@ -209,8 +196,7 @@ function calc(txMonth, txAll, accs, cats, rng){
     vSt=vEnd-vNet;tSt=tEnd-tNet;
     setF(rng.ymd,vSt,tSt);
   }else{
-    vSt=0;tSt=0;
-    vEnd=vNet;tEnd=tNet;
+    vSt=0;tSt=0;vEnd=vNet;tEnd=tNet;
   }
 
   var te=pjOut+zp+km+bk+ins+po;
@@ -312,24 +298,22 @@ function load(reset){
   var s=document.getElementById("st");
   if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
 
-  // Параллельные запросы напрямую к API Аспро из браузера
-  var year=new Date().getFullYear();
-  var txParams="&filter[date][from]="+year+"-01-01&filter[date][to]="+year+"-12-31";
-
   Promise.all([
-    apiGet("transaction", txParams),
-    apiGet("bank_account", ""),
-    apiGet("categories", "")
+    api("transaction"),
+    api("bank_account"),
+    api("categories")
   ]).then(function(res){
     var txAll=res[0],accs=res[1],cats=res[2];
     var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
-    console.log("[DDS] tx:",txAll.length,"month:",txM.length);
+    console.log("[DDS] tx:",txAll.length,"month:",txM.length,"accs:",accs.length,"cats:",cats.length);
     if(txM.length){
       var r=calc(txM,txAll,accs,cats,rng);
       el.innerHTML=render(r,true);
       renderPoDet(r.poDet);
     }else{
-      el.innerHTML="<div style='padding:12px;color:#9ca3af'>Нет данных за "+rng.label+"</div>";
+      el.innerHTML="<div style='padding:12px;color:#9ca3af'>Нет данных за "+rng.label
+        +"<br><small>tx всего: "+txAll.length+", за месяц: "+txM.length
+        +"<br>диапазон: "+rng.s0+" — "+rng.s1+"</small></div>";
     }
     var b=document.getElementById("btn");if(b)b.onclick=function(){load(false);};
     var rb=document.getElementById("rst");if(rb)rb.onclick=function(){load(true);};
