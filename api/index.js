@@ -79,7 +79,7 @@ var VSIP={
   "Альфа ВСИП":1,"ВСИП Депозиты":1,"Счет ВТБ":1,
   "Счет РХСБ":1,"Счет Сбербанк":1,"Расчетный счет 9637":1
 };
-var TT={"Альфа ТТ (ВСИП)":1,"ТТ Депозиты":1};
+var TT={"Альфа ТТ (ВСИП)":1};
 var OFF={24:1,26:1,27:1};
 var PN={1:"Кемерово",3:"Южно-Сахалинск",13:"Барнаул",12:"Киров",
         23:"Сыктывкар",9:"Рузаевка",7:"Иволгинск",6:"Десногорск",
@@ -150,26 +150,45 @@ function calc(txMonth, txAll, accs, cats, rng){
   accs.forEach(function(a){aMap[a.id]=a.name||"";});
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
-  // Остатки из fixed_balance + все транзакции от fixed_balance_date
-  var vFix=0,tFix=0,vDate="1900-01-01",tDate="1900-01-01";
-  accs.forEach(function(a){
-    var n=a.name||"";
-    var fb=num(a.fixed_balance)||0;
-    var fd=a.fixed_balance_date||"1900-01-01";
-    if(VSIP[n]){vFix+=fb;if(fd>vDate)vDate=fd;}
-    if(TT[n])  {tFix+=fb;if(fd>tDate)tDate=fd;}
-  });
-  var vTot=0,tTot=0;
-  txAll.forEach(function(tx){
-    if(!tx.date)return;
-    var an=aMap[tx.org_account_id]||"";
-    var cn=cMap[tx.category_id]||"";
-    if(AC[cn]==="skip")return;
-    var inc=num(tx.income)||0,out=num(tx.outcome)||0;
-    if(VSIP[an]&&tx.date>=vDate&&tx.date<=rng.s1)vTot+=inc-out;
-    if(TT[an]  &&tx.date>=tDate&&tx.date<=rng.s1)tTot+=inc-out;
-  });
-  var vEnd=vFix+vTot, tEnd=tFix+tTot;
+  // Остатки на конец: читаем из виджетов на странице (как в ТМ-скрипте)
+  // Формат: "9 495 371 p.\nВСИП" и "-1 974 449 p.\nООО"
+  var vEnd=null, tEnd=null;
+  try{
+    var domText=window.parent.document.body.innerText||"";
+    var mV=domText.match(/([-\d][\d\s]*)\s*[рp]\.\s*\n\s*ВСИП/);
+    // Находим все пары "сумма\nназвание" для всех счетов
+    var allMatches=[...domText.matchAll(/([-\d][\d\s]*)\s*[рp]\.\s*\n([^\n]+)/g)];
+    allMatches.forEach(function(m){
+      var s=num(m[1].replace(/\s/g,""));
+      var name=m[2].trim();
+      if(name==="ВСИП")vEnd=s;
+      if(/Альфа ТТ/.test(name))tEnd=(tEnd||0)+s;
+      if(/ТТ Депозиты/.test(name))tEnd=(tEnd||0)+s;
+    });
+  }catch(e){}
+  // Если DOM недоступен — fallback через fixed_balance
+  if(vEnd===null||tEnd===null){
+    var vFix=0,tFix=0,vDate="1900-01-01",tDate="1900-01-01";
+    accs.forEach(function(a){
+      var n=a.name||"",fb=num(a.fixed_balance)||0,fd=a.fixed_balance_date||"1900-01-01";
+      if(VSIP[n]){vFix+=fb;if(fd>vDate)vDate=fd;}
+      if(TT[n])  {tFix+=fb;if(fd>tDate)tDate=fd;}
+    });
+    var cutoff=(new Date().getFullYear()-1)+"-01-01";
+    if(vDate<cutoff)vDate=cutoff;
+    if(tDate<cutoff)tDate=cutoff;
+    var vTot=0,tTot=0;
+    txAll.forEach(function(tx){
+      if(!tx.date)return;
+      var an=aMap[tx.org_account_id]||"",cn=cMap[tx.category_id]||"";
+      if(AC[cn]==="skip")return;
+      var inc=num(tx.income)||0,out=num(tx.outcome)||0;
+      if(VSIP[an]&&tx.date>=vDate&&tx.date<=rng.s1)vTot+=inc-out;
+      if(TT[an]  &&tx.date>=tDate&&tx.date<=rng.s1)tTot+=inc-out;
+    });
+    if(vEnd===null)vEnd=vFix+vTot;
+    if(tEnd===null)tEnd=tFix+tTot;
+  }
 
   // Нетто за текущий месяц
   var vNet=0,tNet=0;
