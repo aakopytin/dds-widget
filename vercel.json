@@ -9,6 +9,9 @@
   "functions": {
     "api/data.js": {
       "maxDuration": 60
+    },
+    "api/index.js": {
+      "maxDuration": 60
     }
   }
 }
