@@ -133,25 +133,24 @@ function loadAll(entity) {
   });
 }
 
-function calc(txMonth,accs,cats,rng){
+function calc(txMonth,txAll,accs,cats,rng){
   var aMap={},cMap={};
   accs.forEach(function(a){aMap[a.id]=a.name||"";});
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
-  var vEnd=null,tEnd=null;
-  try{
-    var domText=window.parent.document.body.innerText||"";
-    var allM=[...domText.matchAll(/([-\\d][\\d\\s]*)\\s*[рp]\\.\\s*\\n([^\\n]+)/g)];
-    allM.forEach(function(m){
-      var s=num(m[1].replace(/\\s/g,""));
-      var name=m[2].trim();
-      if(name==="ВСИП")vEnd=s;
-      if(/Альфа ТТ/.test(name))tEnd=(tEnd||0)+s;
-      if(/ТТ Депозиты/.test(name))tEnd=(tEnd||0)+s;
-    });
-  }catch(e){}
+  // Считаем остатки суммируя ВСЕ транзакции от начала истории до конца месяца
+  var vEnd=0, tEnd=0;
+  txAll.forEach(function(tx){
+    if(!tx.date||tx.date>rng.s1)return;
+    var an=aMap[tx.org_account_id]||"";
+    var cn=cMap[tx.category_id]||"";
+    if(AC[cn]==="skip")return;
+    var inc=num(tx.income)||0, out=num(tx.outcome)||0;
+    if(VSIP[an]){vEnd+=inc-out;}
+    if(TT[an])  {tEnd+=inc-out;}
+  });
 
-  var pr=0,zp=0,km=0,bk=0,ins=0,po=0,pjIn=0,pjOut=0,refund=0;
+    var pr=0,zp=0,km=0,bk=0,ins=0,po=0,pjIn=0,pjOut=0,refund=0;
   var piP={},poP={},poDet=[],vNet=0,tNet=0;
 
   txMonth.forEach(function(tx){
@@ -177,10 +176,17 @@ function calc(txMonth,accs,cats,rng){
     }
   });
 
-  var fixed=getF(rng.ymd),vSt,tSt;
-  if(fixed){vSt=fixed.v;tSt=fixed.t;if(vEnd===null)vEnd=vSt+vNet;if(tEnd===null)tEnd=tSt+tNet;}
-  else if(vEnd!==null&&tEnd!==null){vSt=vEnd-vNet;tSt=tEnd-tNet;setF(rng.ymd,vSt,tSt);}
-  else{vSt=0;tSt=0;vEnd=vNet;tEnd=tNet;}
+  // Остаток на начало месяца = все движения до начала месяца
+  var vSt=0, tSt=0;
+  txAll.forEach(function(tx){
+    if(!tx.date||tx.date>=rng.s0)return;
+    var an=aMap[tx.org_account_id]||"";
+    var cn=cMap[tx.category_id]||"";
+    if(AC[cn]==="skip")return;
+    var inc=num(tx.income)||0, out=num(tx.outcome)||0;
+    if(VSIP[an]){vSt+=inc-out;}
+    if(TT[an])  {tSt+=inc-out;}
+  });
 
   var te=pjOut+zp+km+bk+ins+po;
   return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,tS:vSt+tSt,tE:(vEnd||0)+(tEnd||0),
@@ -254,6 +260,22 @@ function load(reset){
   var s=document.getElementById("st");
   if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
 
+  // Запрашиваем остатки у родительского окна через postMessage
+  function getBalances(){
+    return new Promise(function(resolve){
+      var done=false;
+      window.addEventListener('message',function handler(e){
+        if(!e.data||e.data.type!=='dds_balances')return;
+        window.removeEventListener('message',handler);
+        done=true;
+        resolve(e.data);
+      });
+      try{window.parent.postMessage({type:'dds_get_balances'},'*');}catch(e){}
+      // Таймаут 2 сек — если родитель не ответил, продолжаем без остатков
+      setTimeout(function(){if(!done)resolve(null);},2000);
+    });
+  }
+
   Promise.all([
     loadAll("transaction"),
     loadAll("bank_account"),
@@ -263,7 +285,7 @@ function load(reset){
     var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
     console.log("[DDS] tx:",txAll.length,"month:",txM.length,"accs:",accs.length,"cats:",cats.length);
     if(txM.length){
-      var r=calc(txM,accs,cats,rng);
+      var r=calc(txM,txAll,accs,cats,rng);
       el.innerHTML=render(r,true);
       renderPoDet(r.poDet);
     }else{
