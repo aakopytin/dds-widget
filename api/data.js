@@ -22,36 +22,31 @@ module.exports = async function handler(req, res) {
     const r0 = await fetch(base + '&page=1');
     if (!r0.ok) return res.status(r0.status).json({ error: `API ${r0.status}` });
     const d0 = await r0.json();
+    const firstItems = d0?.response?.items || [];
     const total = d0?.response?.total || 0;
     const totalPages = Math.ceil(total / 50);
 
     console.log(`[DDS] ${entity}: total=${total}, pages=${totalPages}`);
 
-    // Шаг 2: загружаем все страницы параллельно
-    const pageNums = [];
-    for (let p = 1; p <= Math.min(totalPages, 60); p++) pageNums.push(p);
-
-    // Батчи по 8 параллельных запросов
-    const BATCH = 8;
-    const pageResults = new Array(pageNums.length);
-
-    for (let i = 0; i < pageNums.length; i += BATCH) {
-      const batch = pageNums.slice(i, i + BATCH);
-      const responses = await Promise.all(batch.map(async (page) => {
-        const r = await fetch(base + '&page=' + page);
-        if (!r.ok) return { page, items: [] };
-        const d = await r.json();
-        return { page, items: d?.response?.items || [] };
-      }));
-      responses.forEach(res => { pageResults[res.page - 1] = res.items; });
-      console.log(`[DDS] ${entity}: batch done, pages ${batch[0]}-${batch[batch.length-1]}`);
+    if (totalPages <= 1) {
+      return res.status(200).json({ items: firstItems });
     }
 
-    // Собираем в правильном порядке
-    const allItems = [];
-    pageResults.forEach(items => { if (items) allItems.push(...items); });
+    // Шаг 2: загружаем все страницы строго последовательно
+    const allItems = [...firstItems];
 
-    console.log(`[DDS] ${entity}: collected ${allItems.length}/${total}`);
+    for (let page = 2; page <= Math.min(totalPages, 60); page++) {
+      const r = await fetch(base + '&page=' + page);
+      if (!r.ok) {
+        console.error(`[DDS] page ${page} failed: ${r.status}`);
+        break;
+      }
+      const d = await r.json();
+      const items = d?.response?.items || [];
+      allItems.push(...items);
+      console.log(`[DDS] ${entity} p${page}: ${allItems.length}/${total}`);
+    }
+
     return res.status(200).json({ items: allItems });
 
   } catch (err) {
