@@ -37,7 +37,7 @@ return res.status(200).send(html(domain, accountId, accessToken));
 }
 
 return res.status(200).send('<html><body style="font-family:sans-serif;padding:20px">' +
-'<h3>&#x2713; ÐÐÐ¡ Ð²Ð¸Ð´Ð¶ÐµÑ ÑÐ°Ð±Ð¾ÑÐ°ÐµÑ</h3></body></html>');
+'<h3>&#x2713; ДДС виджет работает</h3></body></html>');
 };
 
 function esc(s) {
@@ -50,7 +50,7 @@ return `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ÐÐÐ¡</title>
+<title>ДДС</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:12px;
@@ -63,48 +63,48 @@ details table td{font-size:10px;color:#555;padding:2px 4px}
 </style>
 </head>
 <body>
-<div id="filters" style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb"><span style="font-size:11px;color:#6b7280">C</span><input type="date" id="d0" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"><span style="font-size:11px;color:#6b7280">Ð¿Ð¾</span><input type="date" id="d1" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"></div>
-<div id="root" style="color:#9ca3af">ÐÐÐ¡ â Ð·Ð°Ð³ÑÑÐ·ÐºÐ°â¦</div>
+<div id="filters" style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb"><span style="font-size:11px;color:#6b7280">C</span><input type="date" id="d0" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"><span style="font-size:11px;color:#6b7280">по</span><input type="date" id="d1" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"></div>
+<div id="root" style="color:#9ca3af">ДДС — загрузка…</div>
 <script>
 var DOMAIN="${esc(domain)}";
 var ACCOUNT_ID="${esc(accountId)}";
 var TOKEN="${esc(accessToken)}";
 
 var VSIP={
-"ÐÐ»ÑÑÐ° ÐÐ¡ÐÐ":1,"ÐÐ¡ÐÐ ÐÐµÐ¿Ð¾Ð·Ð¸ÑÑ":1,"Ð¡ÑÐµÑ ÐÐ¢Ð":1,
-"Ð¡ÑÐµÑ Ð Ð¥Ð¡Ð":1,"Ð¡ÑÐµÑ Ð¡Ð±ÐµÑÐ±Ð°Ð½Ðº":1,"Ð¡ÑÐµÑ Ð¡Ð¾Ð²ÐºÐ¾Ð¼Ð±Ð°Ð½Ðº":1
+"Альфа ВСИП":1,"ВСИП Депозиты":1,"Счет ВТБ":1,
+"Счет РХСБ":1,"Счет Сбербанк":1,"Счет Совкомбанк":1
 };
-var TT={"ÐÐ»ÑÑÐ° Ð¢Ð¢ (ÐÐ¡ÐÐ)":1};
+var TT={"Альфа ТТ (ВСИП)":1};
 var OFF={24:1,26:1,27:1};
-var PN={1:"ÐÐµÐ¼ÐµÑÐ¾Ð²Ð¾",3:"Ð®Ð¶Ð½Ð¾-Ð¡Ð°ÑÐ°Ð»Ð¸Ð½ÑÐº",13:"ÐÐ°ÑÐ½Ð°ÑÐ»",12:"ÐÐ¸ÑÐ¾Ð²",
-23:"Ð¡ÑÐºÑÑÐ²ÐºÐ°Ñ",9:"Ð ÑÐ·Ð°ÐµÐ²ÐºÐ°",7:"ÐÐ²Ð¾Ð»Ð³Ð¸Ð½ÑÐº",6:"ÐÐµÑÐ½Ð¾Ð³Ð¾ÑÑÐº",
-100:"Ð¦ÐµÐ½ÑÑÐ°Ð»ÑÐ½ÑÐ¹ Ð´Ð¾Ð³Ð¾Ð²Ð¾Ñ",101:"ÐÑÐ¾ÑÐ¸Ðµ Ð¿ÑÐ¾ÐµÐºÑÑ"};
+var PN={1:"Кемерово",3:"Южно-Сахалинск",13:"Барнаул",12:"Киров",
+23:"Сыктывкар",9:"Рузаевка",7:"Иволгинск",6:"Десногорск",
+100:"Центральный договор",101:"Прочие проекты"};
 var PO=[1,3,13,12,23,9,7,6,100,101];
 var PG={2:100,18:100,19:100,29:100,30:100,31:100,32:100,33:100,17:101,20:101,22:101};
 var AC={
-"ÐÐµÑÐµÐ²Ð¾Ð´ Ð¼ÐµÐ¶Ð´Ñ ÑÑÐµÑÐ°Ð¼Ð¸ (Ð¿Ð¾ÑÑÑÐ¿Ð»ÐµÐ½Ð¸Ðµ)":"tr",
-"ÐÐµÑÐµÐ²Ð¾Ð´ Ð¼ÐµÐ¶Ð´Ñ ÑÑÐµÑÐ°Ð¼Ð¸ (ÑÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ)":"tr",
-"ÐÐ¾Ð»ÑÑÐµÐ½Ð¸Ðµ ÐºÑÐµÐ´Ð¸ÑÐ°":"skip","ÐÑÐ¿Ð»Ð°ÑÐ° ÐºÑÐµÐ´Ð¸ÑÐ°":"skip",
-"ÐÐºÐ°Ð·Ð°Ð½Ð¸Ðµ ÑÑÐ»ÑÐ³":"pjIn","ÐÐ¾Ð·Ð²ÑÐ°Ñ ÐÐ¡. Ð·Ð° Ð·Ð°ÐºÐ°Ð·Ñ":"refund",
-"ÐÑÐ¾ÑÐµÐ½ÑÑ Ðº Ð¿Ð¾Ð»ÑÑÐµÐ½Ð¸Ñ":"pr",
-"ÐÐ°ÑÐ¿Ð»Ð°ÑÐ°":"zp","ÐÐ¾Ð¼Ð°Ð½Ð´Ð¸ÑÐ¾Ð²ÐºÐ¸":"km","Ð¡ÑÑÐ°ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ":"ins",
-"Ð Ð°ÑÑÐ¾Ð´Ñ Ð½Ð° ÑÑÐ»ÑÐ³Ð¸ Ð±Ð°Ð½ÐºÐ¾Ð²":"bk",
-"ÐÐ°Ð»Ð¾Ð³Ð¸ Ð¸ Ð²Ð·Ð½Ð¾ÑÑ":"po","ÐÐ°Ð»Ð¾Ð³Ð¸ - ÐÐÐ¡":"po","ÐÑÐ¾ÑÐµÐµ":"po",
-"ÐÑÐµÐ½Ð´Ð°":"po","ÐÑÑÐ³Ð°Ð»ÑÐµÑÐ¸Ñ":"po","ÐÐ½ÑÐµÑÐ½ÐµÑ Ð¸ ÑÐ²ÑÐ·Ñ":"po",
-"Ð Ð°ÑÑÐ¾Ð´Ñ Ð½Ð° Ð»Ð¸Ð·Ð¸Ð½Ð³":"po","ÐÑÐ¾ÑÐµÐ½ÑÑ Ðº ÑÐ¿Ð»Ð°ÑÐµ":"po","ÐÐ±Ð¾ÑÑÐ´Ð¾Ð²Ð°Ð½Ð¸Ðµ":"po",
-"ÐÐ¾Ð·Ð²ÑÐ°ÑÑ ÐºÐ»Ð¸ÐµÐ½ÑÐ°Ð¼":"po","ÐÐµÑÐ°ÑÐ¿ÑÐµÐ´ÐµÐ»ÐµÐ½Ð½ÑÐµ":"po",
-"ÐÐµÑÐ°ÑÐ¿ÑÐµÐ´ÐµÐ»ÐµÐ½Ð½ÑÐµ (ÑÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ)":"po","Ð¢ÐµÑÑÑ Ð¸ Ð¸ÑÐ¿ÑÑÐ°Ð½Ð¸Ñ":"po",
-"Ð£ÑÐ»ÑÐ³Ð¸ Ð¿Ð¾ ÑÐµÑÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¸Ð¸":"po",
-"Ð¡Ð¾ÑÑÐ°Ð²Ð»ÐµÐ½Ð¸Ðµ Ð¸ÑÐ¿Ð¾Ð»Ð½Ð¸ÑÐµÐ»ÑÐ½Ð¾Ð¹ Ð´Ð¾ÐºÑÐ¼ÐµÐ½ÑÐ°ÑÐ¸Ð¸":"po",
-"Ð¡ÐÐ  (ÐÐµÐ· Ð´ÐµÑÐ°Ð»Ð¸Ð·Ð°ÑÐ¸Ð¸)":"pjOut","Ð¡ÐÐ  ÐÐµÐ½Ñ+ÐºÐ¾Ð½Ð´Ð¸Ñ":"pjOut",
-"ÐÐ°ÑÐµÑÐ¸Ð°Ð»Ñ (ÐÐµÐ½ÑÐ¸Ð»ÑÑÐ¸Ñ)":"pjOut","ÐÐ°ÑÐµÑÐ¸Ð°Ð»Ñ (ÐÑÐ¾Ð¿Ð»ÐµÐ½Ð¸Ðµ)":"pjOut",
-"ÐÐ°ÑÐµÑÐ¸Ð°Ð»Ñ (ÐÐ¾ÑÐ¾Ð»ÐºÐ¸)":"pjOut","ÐÐ°ÑÐµÑÐ¸Ð°Ð»Ñ (ÐÑÐ¾ÐµÐ¼Ñ)":"pjOut",
-"ÐÐ°ÑÐµÑÐ¸Ð°Ð»Ñ (Ð¡ÑÐµÐ½Ñ)"ÐÐ¾Ñt","ÐÐ°ÑÐµÑÐ¸Ð°Ð»Ñ (Ð¢ÑÐ°Ð½ÑÐ¿Ð¾ÑÑ, ÐÐ¾Ð³Ð¸ÑÑÐ¸ÐºÐ°)":"pjOut",
-"ÐÐ°ÑÐµÑÐ¸Ð°Ð»Ñ (Ð­Ð»ÐµÐºÑÑÐ¸ÐºÐ°)":"pjOut","ÐÐ°ÑÐµÑÐ¸Ð°Ð»Ñ ÑÐµÑÐ½Ð¾Ð²ÑÐµ":"pjOut",
-"ÐÑÐ¾ÐµÐºÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ-ÐÐ·ÑÑÐºÐ°Ð½Ð¸Ðµ":"pjOut"
+"Перевод между счетами (поступление)":"tr",
+"Перевод между счетами (списание)":"tr",
+"Получение кредита":"skip","Выплата кредита":"skip",
+"Оказание услуг":"pjIn","Возврат ДС. за заказы":"refund",
+"Проценты к получению":"pr",
+"Зарплата":"zp","Командировки":"km","Страхование":"ins",
+"Расходы на услуги банков":"bk",
+"Налоги и взносы":"po","Налоги - НДС":"po","Прочее":"po",
+"Аренда":"po","Бухгалтерия":"po","Интернет и связь":"po",
+"Расходы на лизинг":"po","Проценты к уплате":"po","Оборудование":"po",
+"Возвраты клиентам":"po","Нераспределенные":"po",
+"Нераспределенные (списание)":"po","Тесты и испытания":"po",
+"Услуги по сертификации":"po",
+"Составление исполнительной документации":"po",
+"СМР (Без детализации)":"pjOut","СМР Вент+кондиц":"pjOut",
+"Материалы (Вентиляция)":"pjOut","Материалы (Отопление)":"pjOut",
+"Материалы (Потолки)":"pjOut","Материалы (Проемы)":"pjOut",
+"Материалы (Стены)":"pjOut","Материалы (Транспорт, Логистика)":"pjOut",
+"Материалы (Электрика)":"pjOut","Материалы черновые":"pjOut",
+"Проектирование-Изыскание":"pjOut"
 };
 
-function fmt(v){if(!v&&v!==0)return"â";if(v===0)return"â";return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);}
+function fmt(v){if(!v&&v!==0)return"—";if(v===0)return"—";return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);}
 function fmtI(v){return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:0,maximumFractionDigits:0}).format(v||0);}
 function num(s){if(!s&&s!==0)return 0;return parseFloat(String(s).replace(/[^\\d.\\-]/g,""))||0;}
 function padZ(n){return n<10?"0"+n:""+n;}
@@ -120,8 +120,8 @@ var pts0=s0.split("-"),pts1=s1.split("-");
 var d0=padZ(parseInt(pts0[2],10))+"."+padZ(parseInt(pts0[1],10))+"."+pts0[0];
 var d1=padZ(parseInt(pts1[2],10))+"."+padZ(parseInt(pts1[1],10))+"."+pts1[0];
 var ymd=s0.slice(0,7);
-var mo=["Ð¯Ð½Ð²Ð°ÑÑ","Ð¤ÐµÐ²ÑÐ°Ð»Ñ","ÐÐ°ÑÑ","ÐÐ¿ÑÐµÐ»Ñ","ÐÐ°Ð¹","ÐÑÐ½Ñ","ÐÑÐ»Ñ","ÐÐ²Ð³ÑÑÑ","Ð¡ÐµÐ½ÑÑÐ±ÑÑ","ÐÐºÑÑÐ±ÑÑ","ÐÐ¾ÑÐ±ÑÑ","ÐÐµÐºÐ°Ð±ÑÑ"];
-var label=s0.slice(0,7)===s1.slice(0,7)?mo[parseInt(pts0[1],10)-1]+" "+pts0[0]:d0+" â "+d1;
+var mo=["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+var label=s0.slice(0,7)===s1.slice(0,7)?mo[parseInt(pts0[1],10)-1]+" "+pts0[0]:d0+" — "+d1;
 return{ymd:ymd,s0:s0,s1:s1,d0:d0,d1:d1,label:label};
 }
 
@@ -207,56 +207,56 @@ function SEC(l){return"<tr><td colspan='2' style='padding:7px 6px 2px;font-size:
 
 function render(r,live){
 var rows=[],tot=0;
-rows.push(TR("ÐÑÑÐ°ÑÐ¾Ðº "+r.d0+" Â· ÐÐ¡ÐÐ",r.vSt,"",""));
-rows.push(TR("ÐÑÑÐ°ÑÐ¾Ðº "+r.d0+" Â· Ð¢Ð¢",r.tSt,r.tSt<0?"r":"",""));
-rows.push(SEP("ÐÐ¢ÐÐÐ Ð½Ð° "+r.d0,r.tS,""));
-rows.push(TR("ÐÑÑÐ°ÑÐ¾Ðº "+r.d1+" Â· ÐÐ¡ÐÐ",r.vEnd,"",""));
-rows.push(TR("ÐÑÑÐ°ÑÐ¾Ðº "+r.d1+" Â· Ð¢Ð¢",r.tEnd,r.tEnd<0?"r":"",""));
-rows.push(SEP("ÐÐ¢ÐÐÐ Ð½Ð° "+r.d1,r.tE,r.tE>=0?"g":"r"));
-rows.push(SEC("ÐÐ¾ÑÑÑÐ¿Ð»ÐµÐ½Ð¸Ñ"));
+rows.push(TR("Остаток "+r.d0+" · ВСИП",r.vSt,"",""));
+rows.push(TR("Остаток "+r.d0+" · ТТ",r.tSt,r.tSt<0?"r":"",""));
+rows.push(SEP("ИТОГО на "+r.d0,r.tS,""));
+rows.push(TR("Остаток "+r.d1+" · ВСИП",r.vEnd,"",""));
+rows.push(TR("Остаток "+r.d1+" · ТТ",r.tEnd,r.tEnd<0?"r":"",""));
+rows.push(SEP("ИТОГО на "+r.d1,r.tE,r.tE>=0?"g":"r"));
+rows.push(SEC("Поступления"));
 var hasPi=Object.keys(r.piP).length>0;
 if(hasPi){PO.forEach(function(p){var v=r.piP[p];if(v){rows.push(TR(PN[p],v,"g",1));tot+=v;}});}
-else if(r.pjIn){rows.push(TR("ÐÐ¾ÑÑÑÐ¿Ð»ÐµÐ½Ð¸Ñ Ð¿Ð¾ Ð¿ÑÐ¾ÐµÐºÑÐ°Ð¼",r.pjIn,"g",1));tot+=r.pjIn;}
-if(r.pr){rows.push(TR("ÐÑÐ¾ÑÐµÐ½ÑÐ½ÑÐµ Ð´Ð¾ÑÐ¾Ð´Ñ",r.pr,"g",1));tot+=r.pr;}
-if(r.refund){rows.push(TR("ÐÐ¾Ð·Ð²ÑÐ°ÑÑ",r.refund,"g",1));tot+=r.refund;}
-rows.push(SEP("ÐÑÐ¾Ð³Ð¾ Ð¿Ð¾ÑÑÑÐ¿Ð»ÐµÐ½Ð¸Ð¹",tot,"g"));
-rows.push(SEC("Ð Ð°ÑÑÐ¾Ð´Ñ Ð¿Ð¾ Ð¿ÑÐ¾ÐµÐºÑÐ°Ð¼"));
+else if(r.pjIn){rows.push(TR("Поступления по проектам",r.pjIn,"g",1));tot+=r.pjIn;}
+if(r.pr){rows.push(TR("Процентные доходы",r.pr,"g",1));tot+=r.pr;}
+if(r.refund){rows.push(TR("Возвраты",r.refund,"g",1));tot+=r.refund;}
+rows.push(SEP("Итого поступлений",tot,"g"));
+rows.push(SEC("Расходы по проектам"));
 var hasPo=Object.keys(r.poP).length>0;
 if(hasPo){PO.forEach(function(p){var v=r.poP[p]||0;rows.push(TR(PN[p],v,v?"":"m",1));});}
-rows.push(SEP("ÐÑÐ¾Ð³Ð¾ Ð¿ÑÐ¾ÐµÐºÑÑ",r.pjOut,""));
-rows.push(SEC("ÐÑÐ¸ÑÐ½ÑÐµ ÑÐ°ÑÑÐ¾Ð´Ñ"));
-rows.push(TR("ÐÐ°ÑÐ¿Ð»Ð°ÑÐ°",r.zp,r.zp?"":"m",1));
-rows.push(TR("ÐÐ¾Ð¼Ð°Ð½Ð´Ð¸ÑÐ¾Ð²Ð¾ÑÐ½ÑÐµ",r.km,r.km?"":"m",1));
-rows.push(TR("Ð¡ÑÑÐ°ÑÐ¾Ð²Ð°Ð½Ð¸Ðµ",r.ins,r.ins?"":"m",1));
-rows.push(TR("ÐÐ°Ð½ÐºÐ¾Ð²ÑÐºÐ¸Ðµ ÐºÐ¾Ð¼Ð¸ÑÑÐ¸Ð¸",r.bk,r.bk?"":"m",1));
-rows.push(TR("ÐÑÐ¾ÑÐ¸Ðµ ÑÐ°ÑÑÐ¾Ð´Ñ Ð¾ÑÐ¸ÑÐ°",r.po,r.po?"":"m",1));
-rows.push(SEP("ÐÑÐ¾Ð³Ð¾ Ð¾ÑÐ¸ÑÐ½ÑÐµ",r.te,""));
+rows.push(SEP("Итого проекты",r.pjOut,""));
+rows.push(SEC("Офисные расходы"));
+rows.push(TR("Зарплата",r.zp,r.zp?"":"m",1));
+rows.push(TR("Командировочные",r.km,r.km?"":"m",1));
+rows.push(TR("Страхование",r.ins,r.ins?"":"m",1));
+rows.push(TR("Банковские комиссии",r.bk,r.bk?"":"m",1));
+rows.push(TR("Прочие расходы офиса",r.po,r.po?"":"m",1));
+rows.push(SEP("Итого офисные",r.te,""));
 var trNetto=r.trIn-r.trOut;
 var ctrl=r.tS+tot-(r.te-trNetto)-r.tE,cOk=Math.abs(ctrl)<1;
-rows.push(SEC("ÐÐµÑÐµÐ²Ð¾Ð´Ñ Ð¼ÐµÐ¶Ð´Ñ ÑÑÐµÑÐ°Ð¼Ð¸"));
-rows.push(TR("ÐÐ¾ÑÑÑÐ¿Ð»ÐµÐ½Ð¸Ñ",r.trIn,r.trIn>0?"g":"m",1));
-rows.push(TR("Ð¡Ð¿Ð¸ÑÐ°Ð½Ð¸Ñ",r.trOut,r.trOut>0?"":"m",1));
-rows.push(SEP("ÐÑÐ¾Ð³Ð¾ Ð¿ÐµÑÐµÐ²Ð¾Ð´Ñ Ð½ÐµÑÑÐ¾",trNetto,trNetto>0?"g":trNetto<0?"r":""));
-rows.push(SEP("ÐÐ¡ÐÐÐ Ð ÐÐ¡Ð¥ÐÐÐÐ",r.te-trNetto,""));
-rows.push(SEP(cOk?"ÐÐ¾Ð½ÑÑÐ¾Ð»ÑÐ½Ð°Ñ ÑÑÐ¼Ð¼Ð°":"ÐÐ¾Ð½ÑÑÐ¾Ð»ÑÐ½Ð°Ñ ÑÑÐ¼Ð¼Ð° â ",ctrl,cOk?"g":"r"));
-var st=live?'<span style="color:#16a34a">â live Â· '+r.cnt+' ÑÑ.</span>':'<span style="color:#9ca3af">Ð´Ð°Ð½Ð½ÑÐµ Ð½Ð° '+r.d1+'</span>';
+rows.push(SEC("Переводы между счетами"));
+rows.push(TR("Поступления",r.trIn,r.trIn>0?"g":"m",1));
+rows.push(TR("Списания",r.trOut,r.trOut>0?"":"m",1));
+rows.push(SEP("Итого переводы нетто",trNetto,trNetto>0?"g":trNetto<0?"r":""));
+rows.push(SEP("ВСЕГО РАСХОДОВ",r.te-trNetto,""));
+rows.push(SEP(cOk?"Контрольная сумма":"Контрольная сумма ⚠",ctrl,cOk?"g":"r"));
+var st=live?'<span style="color:#16a34a">● live · '+r.cnt+' тр.</span>':'<span style="color:#9ca3af">данные на '+r.d1+'</span>';
 return'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;">'
-+'<div><div style="font-size:13px;font-weight:600">ÐÐÐ¡ â '+r.label+'</div>'
-+'<div style="font-size:10px;color:#9ca3af;margin-top:1px">'+r.d0+' â '+r.d1+'</div></div>'
++'<div><div style="font-size:13px;font-weight:600">ДДС — '+r.label+'</div>'
++'<div style="font-size:10px;color:#9ca3af;margin-top:1px">'+r.d0+' — '+r.d1+'</div></div>'
 +'<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">'
 +'<span id="st" style="font-size:10px">'+st+'</span>'
-+'<button id="btn" style="background:none;border:1px solid #d1d5db;color:#6b7280;font-size:10px;padding:1px 6px;border-radius:3px;cursor:pointer">â»</button>'
-+'<button id="rst" style="background:none;border:1px solid #d1d5db;color:#9ca3af;font-size:10px;padding:1px 5px;border-radius:3px;cursor:pointer">â³â</button>'
++'<button id="btn" style="background:none;border:1px solid #d1d5db;color:#6b7280;font-size:10px;padding:1px 6px;border-radius:3px;cursor:pointer">↻</button>'
++'<button id="rst" style="background:none;border:1px solid #d1d5db;color:#9ca3af;font-size:10px;padding:1px 5px;border-radius:3px;cursor:pointer">⟳₀</button>'
 +'</div></div>'
 +'<table>'+rows.join('')+'</table>'
-+'<div style="margin-top:5px;font-size:10px;color:#9ca3af">Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾: '+new Date().toLocaleTimeString("ru-RU")+'</div>';
++'<div style="margin-top:5px;font-size:10px;color:#9ca3af">обновлено: '+new Date().toLocaleTimeString("ru-RU")+'</div>';
 }
 
 function renderPoDet(poDet){
 if(!poDet||!poDet.length)return;
 var d=document.createElement("details"),s=document.createElement("summary");
 var tot=poDet.reduce(function(a,p){return a+p.out;},0);
-s.textContent="ÐÑÐ¾ÑÐ¸Ðµ ÑÐ°ÑÑÐ¾Ð´Ñ ("+poDet.length+" ÑÑ. Ð½Ð° "+fmtI(tot)+" Ñ.)";
+s.textContent="Прочие расходы ("+poDet.length+" тр. на "+fmtI(tot)+" р.)";
 d.appendChild(s);
 var t=document.createElement("table");t.style.cssText="width:100%;border-collapse:collapse;margin-top:4px";
 poDet.sort(function(a,b){return b.out-a.out;}).forEach(function(p){
@@ -271,7 +271,7 @@ function load(reset){
 var el=document.getElementById("root"),rng=getRange();
 if(reset)clrF(rng.ymd);
 var s=document.getElementById("st");
-if(s){s.textContent="Ð·Ð°Ð³ÑÑÐ·ÐºÐ°â¦";s.style.color="#9ca3af";}
+if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
 
 Promise.all([
 loadAll("transaction"),
@@ -288,17 +288,17 @@ el.innerHTML=render(r,true);
 renderPoDet(r.poDet);
 }else{
 el.innerHTML="<div style='padding:12px;font-size:11px;color:#666'>"
-+"ÐÐµÑ Ð´Ð°Ð½Ð½ÑÑ Ð·Ð° "+rng.label+"<br>"
-+"tx Ð²ÑÐµÐ³Ð¾: "+txAll.length+", Ð·Ð° Ð¿ÐµÑÐ¸Ð¾Ð´: "+txM.length+"<br>"
-+"Ð´Ð¸Ð°Ð¿Ð°Ð·Ð¾Ð½: "+rng.s0+" â "+rng.s1+"<br>"
++"Нет данных за "+rng.label+"<br>"
++"tx всего: "+txAll.length+", за период: "+txM.length+"<br>"
++"диапазон: "+rng.s0+" — "+rng.s1+"<br>"
 +"domain: "+DOMAIN+"<br>"
-+"token: "+(TOKEN?TOKEN.slice(0,20)+"...":"Ð½ÐµÑ")
++"token: "+(TOKEN?TOKEN.slice(0,20)+"...":"нет")
 +"</div>";
 }
 var b=document.getElementById("btn");if(b)b.onclick=function(){load(false);};
 var rb=document.getElementById("rst");if(rb)rb.onclick=function(){load(true);};
 }).catch(function(e){
-el.innerHTML="<div style='padding:12px;color:#dc2626'>ÐÑÐ¸Ð±ÐºÐ°: "+e+"</div>";
+el.innerHTML="<div style='padding:12px;color:#dc2626'>Ошибка: "+e+"</div>";
 console.error("[DDS]",e);
 });
 }
