@@ -225,11 +225,14 @@ function render(r,live){
   rows.push(TR("Страхование",r.ins,r.ins?"":"m",1));
   rows.push(TR("Банковские комиссии",r.bk,r.bk?"":"m",1));
   rows.push(TR("Прочие расходы офиса",r.po,r.po?"":"m",1));
-  rows.push(SEP("ВСЕГО РАСХОДОВ",r.te,""));
-  var ctrl=r.tS+tot-r.te-r.tE,cOk=Math.abs(ctrl)<1;
+  rows.push(SEP("Итого офисные",r.te,""));
+  var trNetto=r.trIn-r.trOut;
+  var ctrl=r.tS+tot-(r.te-trNetto)-r.tE,cOk=Math.abs(ctrl)<1;
   rows.push(SEC("Переводы между счетами"));
   rows.push(TR("Поступления",r.trIn,r.trIn>0?"g":"m",1));
   rows.push(TR("Списания",r.trOut,r.trOut>0?"":"m",1));
+  rows.push(SEP("Итого переводы нетто",trNetto,trNetto>0?"g":trNetto<0?"r":""));
+  rows.push(SEP("ВСЕГО РАСХОДОВ",r.te-trNetto,""));
   rows.push(SEP(cOk?"Контрольная сумма":"Контрольная сумма ⚠",ctrl,cOk?"g":"r"));
   var st=live?'<span style="color:#16a34a">● live · '+r.cnt+' тр.</span>':'<span style="color:#9ca3af">данные на '+r.d1+'</span>';
   return'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;">'
