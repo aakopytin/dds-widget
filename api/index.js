@@ -81,8 +81,8 @@ var PN={1:"Кемерово",3:"Южно-Сахалинск",13:"Барнаул"
 var PO=[1,3,13,12,23,9,7,6,100,101];
 var PG={2:100,18:100,19:100,29:100,30:100,31:100,32:100,33:100,17:101,20:101,22:101};
 var AC={
-  "Перевод между счетами (поступление)":"skip",
-  "Перевод между счетами (списание)":"skip",
+  "Перевод между счетами (поступление)":"tr",
+  "Перевод между счетами (списание)":"tr",
   "Получение кредита":"skip","Выплата кредита":"skip",
   "Оказание услуг":"pjIn","Возврат ДС. за заказы":"refund",
   "Проценты к получению":"pr",
@@ -149,7 +149,7 @@ function calc(txMonth,txAll,accs,cats,rng){
     if(TT[an])  {tEnd+=inc-out;}
   });
 
-    var pr=0,zp=0,km=0,bk=0,ins=0,po=0,pjIn=0,pjOut=0,refund=0;
+    var pr=0,zp=0,km=0,bk=0,ins=0,po=0,pjIn=0,pjOut=0,refund=0,trIn=0,trOut=0;
   var piP={},poP={},poDet=[],vNet=0,tNet=0;
 
   txMonth.forEach(function(tx){
@@ -162,6 +162,11 @@ function calc(txMonth,txAll,accs,cats,rng){
     var rp=pid,gp=(rp&&PG[rp])?PG[rp]:rp;
     var pOk=gp&&!!PN[gp],pOff=rp&&!!OFF[rp];
     var cat=AC[cn];if(cat==="skip")return;
+    if(cat==="tr"){
+      // Переводы между счетами — только из офисных проектов 24/26 (не 27=Трансферы)
+      if(rp===24||rp===26){if(inc>0)trIn+=inc;if(out>0)trOut+=out;}
+      return;
+    }
     if(inc>0){
       if(cat==="pr")pr+=inc;
       else if(cat==="pjIn"&&pOk){pjIn+=inc;piP[gp]=(piP[gp]||0)+inc;}
@@ -187,7 +192,7 @@ function calc(txMonth,txAll,accs,cats,rng){
 
   var te=pjOut+zp+km+bk+ins+po;
   return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,tS:vSt+tSt,tE:(vEnd||0)+(tEnd||0),
-    pr:pr,pjIn:pjIn,refund:refund,pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,po:po,te:te,
+    pr:pr,pjIn:pjIn,refund:refund,pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,po:po,te:te,trIn:trIn,trOut:trOut,
     piP:piP,poP:poP,poDet:poDet,cnt:txMonth.length,d0:rng.d0,d1:rng.d1,label:rng.label,ymd:rng.ymd};
 }
 
@@ -222,6 +227,9 @@ function render(r,live){
   rows.push(TR("Прочие расходы офиса",r.po,r.po?"":"m",1));
   rows.push(SEP("ВСЕГО РАСХОДОВ",r.te,""));
   var ctrl=r.tS+tot-r.te-r.tE,cOk=Math.abs(ctrl)<1;
+  rows.push(SEC("Переводы между счетами"));
+  rows.push(TR("Поступления",r.trIn,r.trIn>0?"g":"m",1));
+  rows.push(TR("Списания",r.trOut,r.trOut>0?"":"m",1));
   rows.push(SEP(cOk?"Контрольная сумма":"Контрольная сумма ⚠",ctrl,cOk?"g":"r"));
   var st=live?'<span style="color:#16a34a">● live · '+r.cnt+' тр.</span>':'<span style="color:#9ca3af">данные на '+r.d1+'</span>';
   return'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;">'
