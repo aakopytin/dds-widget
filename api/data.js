@@ -14,47 +14,44 @@ module.exports = async function handler(req, res) {
   const ALLOWED = ['transaction', 'bank_account', 'categories'];
   if (!ALLOWED.includes(entity)) return res.status(403).json({ error: 'Not allowed' });
 
-  const base = `https://${domain}/api/v1/module/fin/${entity}/list?api_key=${encodeURIComponent(apiKey)}&count=50`;
+  const base = `https://${domain}/api/v1/module/fin/${entity}/list`
+    + `?api_key=${encodeURIComponent(apiKey)}&count=50`;
 
   try {
-    // Первый запрос — узнаём total
+    // Шаг 1: узнаём total
     const r0 = await fetch(base + '&page=1');
-    if (!r0.ok) {
-      const text = await r0.text();
-      return res.status(r0.status).json({ error: `API ${r0.status}`, detail: text.slice(0,200) });
-    }
+    if (!r0.ok) return res.status(r0.status).json({ error: `API ${r0.status}` });
     const d0 = await r0.json();
-    const firstItems = d0?.response?.items || [];
     const total = d0?.response?.total || 0;
     const totalPages = Math.ceil(total / 50);
 
     console.log(`[DDS] ${entity}: total=${total}, pages=${totalPages}`);
 
-    if (totalPages <= 1) {
-      return res.status(200).json({ items: firstItems });
-    }
+    // Шаг 2: загружаем все страницы параллельно
+    const pageNums = [];
+    for (let p = 1; p <= Math.min(totalPages, 60); p++) pageNums.push(p);
 
-    // Загружаем остальные страницы параллельно (батчами по 10)
-    const allItems = [...firstItems];
-    const remaining = [];
-    for (let p = 2; p <= Math.min(totalPages, 60); p++) {
-      remaining.push(p);
-    }
+    // Батчи по 8 параллельных запросов
+    const BATCH = 8;
+    const pageResults = new Array(pageNums.length);
 
-    // Батчи по 10 параллельных запросов
-    const BATCH = 10;
-    for (let i = 0; i < remaining.length; i += BATCH) {
-      const batch = remaining.slice(i, i + BATCH);
-      const results = await Promise.all(batch.map(async (page) => {
+    for (let i = 0; i < pageNums.length; i += BATCH) {
+      const batch = pageNums.slice(i, i + BATCH);
+      const responses = await Promise.all(batch.map(async (page) => {
         const r = await fetch(base + '&page=' + page);
-        if (!r.ok) return [];
+        if (!r.ok) return { page, items: [] };
         const d = await r.json();
-        return d?.response?.items || [];
+        return { page, items: d?.response?.items || [] };
       }));
-      results.forEach(items => allItems.push(...items));
-      console.log(`[DDS] ${entity}: loaded ${allItems.length}/${total}`);
+      responses.forEach(res => { pageResults[res.page - 1] = res.items; });
+      console.log(`[DDS] ${entity}: batch done, pages ${batch[0]}-${batch[batch.length-1]}`);
     }
 
+    // Собираем в правильном порядке
+    const allItems = [];
+    pageResults.forEach(items => { if (items) allItems.push(...items); });
+
+    console.log(`[DDS] ${entity}: collected ${allItems.length}/${total}`);
     return res.status(200).json({ items: allItems });
 
   } catch (err) {
