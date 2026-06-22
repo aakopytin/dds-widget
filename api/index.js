@@ -63,12 +63,7 @@ details table td{font-size:10px;color:#555;padding:2px 4px}
 </style>
 </head>
 <body>
-<div id="filters" style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">
-  <span style="font-size:11px;color:#6b7280">С</span>
-  <input type="date" id="d0" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151">
-  <span style="font-size:11px;color:#6b7280">по</span>
-  <input type="date" id="d1" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151">
-</div>
+<div id="filters" style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb"><span style="font-size:11px;color:#6b7280">C</span><input type="date" id="d0" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"><span style="font-size:11px;color:#6b7280">по</span><input type="date" id="d1" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"></div>
 <div id="root" style="color:#9ca3af">ДДС — загрузка…</div>
 <script>
 var DOMAIN="${esc(domain)}";
@@ -111,27 +106,23 @@ var AC={
 
 function fmt(v){if(!v&&v!==0)return"—";if(v===0)return"—";return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);}
 function fmtI(v){return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:0,maximumFractionDigits:0}).format(v||0);}
-function num(s){if(!s&&s!==0)return 0;return parseFloat(String(s).replace(/[^\d.\-]/g,""))||0;}
-
-// --- ИЗМЕНЕНИЕ: getRange читает значения из инпутов #d0 / #d1 ---
+function num(s){if(!s&&s!==0)return 0;return parseFloat(String(s).replace(/[^\\d.\\-]/g,""))||0;}
+function padZ(n){return n<10?"0"+n:""+n;}
 function getRange(){
-  var d0el=document.getElementById("d0"),d1el=document.getElementById("d1");
-  var now=new Date(),y=now.getFullYear(),m=now.getMonth();
-  var p=function(n){return n<10?"0"+n:""+n;};
-  var end=Math.min(now.getDate(),new Date(y,m+1,0).getDate());
-  // Значения из инпутов (если пусты — дефолт: первое/последнее число месяца)
-  var s0=(d0el&&d0el.value)||(y+"-"+p(m+1)+"-01");
-  var s1=(d1el&&d1el.value)||(y+"-"+p(m+1)+"-"+p(end));
-  // Форматирование дат для отображения (ДД.ММ.ГГГГ)
-  function dd(s){var pts=s.split("-");return p(parseInt(pts[2]))+"."+p(parseInt(pts[1]))+"."+pts[0];}
-  var ymd=s0.slice(0,7);
-  var mo=["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-  // Если обе даты в одном месяце — показываем "Месяц Год", иначе — диапазон
-  var dt0=new Date(s0+"T00:00:00");
-  var label=s0.slice(0,7)===s1.slice(0,7)
-    ?mo[dt0.getMonth()]+" "+dt0.getFullYear()
-    :dd(s0)+" — "+dd(s1);
-  return{ymd:ymd,s0:s0,s1:s1,d0:dd(s0),d1:dd(s1),label:label};
+var d0el=document.getElementById("d0"),d1el=document.getElementById("d1");
+var now=new Date(),y=now.getFullYear(),m=now.getMonth();
+var end=Math.min(now.getDate(),new Date(y,m+1,0).getDate());
+var defS0=y+"-"+padZ(m+1)+"-01";
+var defS1=y+"-"+padZ(m+1)+"-"+padZ(end);
+var s0=(d0el&&d0el.value)||defS0;
+var s1=(d1el&&d1el.value)||defS1;
+var pts0=s0.split("-"),pts1=s1.split("-");
+var d0=padZ(parseInt(pts0[2],10))+"."+padZ(parseInt(pts0[1],10))+"."+pts0[0];
+var d1=padZ(parseInt(pts1[2],10))+"."+padZ(parseInt(pts1[1],10))+"."+pts1[0];
+var ymd=s0.slice(0,7);
+var mo=["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+var label=s0.slice(0,7)===s1.slice(0,7)?mo[parseInt(pts0[1],10)-1]+" "+pts0[0]:d0+" — "+d1;
+return{ymd:ymd,s0:s0,s1:s1,d0:d0,d1:d1,label:label};
 }
 
 var lk=function(ym){return"dds_"+ACCOUNT_ID+"_"+ym;};
@@ -139,7 +130,6 @@ function getF(ym){try{var s=localStorage.getItem(lk(ym));return s?JSON.parse(s):
 function setF(ym,v,t){try{localStorage.setItem(lk(ym),JSON.stringify({v:v,t:t}));}catch(e){}}
 function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
 
-// Запросы через серверный прокси /api/data
 function loadAll(entity) {
 return fetch("/api/data", {
 method: "POST",
@@ -157,8 +147,6 @@ var aMap={},cMap={};
 accs.forEach(function(a){aMap[a.id]=a.name||"";});
 cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
-// Считаем остатки суммируя ВСЕ транзакции от начала истории до конца месяца
-// Включаем ВСЕ категории включая переводы (они реально меняют остаток счёта)
 var vEnd=0, tEnd=0;
 txAll.forEach(function(tx){
 if(!tx.date||tx.date>rng.s1)return;
@@ -182,7 +170,6 @@ var rp=pid,gp=(rp&&PG[rp])?PG[rp]:rp;
 var pOk=gp&&!!PN[gp],pOff=rp&&!!OFF[rp];
 var cat=AC[cn];if(cat==="skip")return;
 if(cat==="tr"){
-// Переводы между счетами — только из офисных проектов 24/26 (не 27=Трансферы)
 if(rp===24||rp===26){if(inc>0)trIn+=inc;if(out>0)trOut+=out;}
 return;
 }
@@ -199,7 +186,6 @@ else if(!pOff){pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}
 }
 });
 
-// Остаток на начало периода = все движения до начала выбранного периода
 var vSt=0, tSt=0;
 txAll.forEach(function(tx){
 if(!tx.date||tx.date>=rng.s0)return;
@@ -287,29 +273,12 @@ if(reset)clrF(rng.ymd);
 var s=document.getElementById("st");
 if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
 
-// Запрашиваем остатки у родительского окна через postMessage
-function getBalances(){
-return new Promise(function(resolve){
-var done=false;
-window.addEventListener('message',function handler(e){
-if(!e.data||e.data.type!=='dds_balances')return;
-window.removeEventListener('message',handler);
-done=true;
-resolve(e.data);
-});
-try{window.parent.postMessage({type:'dds_get_balances'},'*');}catch(e){}
-// Таймаут 2 сек — если родитель не ответил, продолжаем без остатков
-setTimeout(function(){if(!done)resolve(null);},2000);
-});
-}
-
 Promise.all([
 loadAll("transaction"),
 loadAll("bank_account"),
 loadAll("categories")
 ]).then(function(res){
 var txAll=res[0],accs=res[1],cats=res[2];
-// Фильтрация по выбранному периоду (getRange уже обновлён из инпутов)
 var rng=getRange();
 var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
 console.log("[DDS] tx:",txAll.length,"period:",txM.length,"accs:",accs.length,"cats:",cats.length);
@@ -334,16 +303,13 @@ console.error("[DDS]",e);
 });
 }
 
-// --- ИЗМЕНЕНИЕ: инициализация дат и привязка событий ---
 (function(){
 var now=new Date(),y=now.getFullYear(),m=now.getMonth();
-var p=function(n){return n<10?"0"+n:""+n;};
 var end=Math.min(now.getDate(),new Date(y,m+1,0).getDate());
+var pad=function(n){return n<10?"0"+n:""+n;};
 var d0el=document.getElementById("d0"),d1el=document.getElementById("d1");
-d0el.value=y+"-"+p(m+1)+"-01";      // первое число текущего месяца
-d1el.value=y+"-"+p(m+1)+"-"+p(end); // сегодня
-d0el.addEventListener("change",function(){load(false);});
-d1el.addEventListener("change",function(){load(false);});
+if(d0el){d0el.value=y+"-"+pad(m+1)+"-01";d0el.addEventListener("change",function(){load(false);});}
+if(d1el){d1el.value=y+"-"+pad(m+1)+"-"+pad(end);d1el.addEventListener("change",function(){load(false);});}
 })();
 
 load(false);
