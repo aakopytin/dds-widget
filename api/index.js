@@ -73,7 +73,7 @@ var VSIP={
   "Альфа ВСИП":1,"ВСИП Депозиты":1,"Счет ВТБ":1,
   "Счет РХСБ":1,"Счет Сбербанк":1,"Расчетный счет 9637":1
 };
-var TT={"Альфа ТТ (ВСИП)":1,"ТТ Депозиты":1};
+var TT={"Альфа ТТ (ВСИП)":1};
 var OFF={24:1,26:1,27:1};
 var PN={1:"Кемерово",3:"Южно-Сахалинск",13:"Барнаул",12:"Киров",
         23:"Сыктывкар",9:"Рузаевка",7:"Иволгинск",6:"Десногорск",
@@ -139,12 +139,11 @@ function calc(txMonth,txAll,accs,cats,rng){
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
   // Считаем остатки суммируя ВСЕ транзакции от начала истории до конца месяца
+  // Включаем ВСЕ категории включая переводы (они реально меняют остаток счёта)
   var vEnd=0, tEnd=0;
   txAll.forEach(function(tx){
     if(!tx.date||tx.date>rng.s1)return;
     var an=aMap[tx.org_account_id]||"";
-    var cn=cMap[tx.category_id]||"";
-    if(AC[cn]==="skip")return;
     var inc=num(tx.income)||0, out=num(tx.outcome)||0;
     if(VSIP[an]){vEnd+=inc-out;}
     if(TT[an])  {tEnd+=inc-out;}
@@ -181,8 +180,6 @@ function calc(txMonth,txAll,accs,cats,rng){
   txAll.forEach(function(tx){
     if(!tx.date||tx.date>=rng.s0)return;
     var an=aMap[tx.org_account_id]||"";
-    var cn=cMap[tx.category_id]||"";
-    if(AC[cn]==="skip")return;
     var inc=num(tx.income)||0, out=num(tx.outcome)||0;
     if(VSIP[an]){vSt+=inc-out;}
     if(TT[an])  {tSt+=inc-out;}
