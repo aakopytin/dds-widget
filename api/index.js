@@ -45,6 +45,10 @@ return String(s||'').replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\
 }
 
 function html(domain, accountId, accessToken) {
+var now=new Date(),ny=now.getFullYear(),nm=now.getMonth(),nd=now.getDate();
+var npad=function(n){return n<10?"0"+n:""+n;};
+var defD0=ny+"-"+npad(nm+1)+"-01";
+var defD1=ny+"-"+npad(nm+1)+"-"+npad(nd);
 return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -63,7 +67,7 @@ details table td{font-size:10px;color:#555;padding:2px 4px}
 </style>
 </head>
 <body>
-<div id="filters" style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb"><span style="font-size:11px;color:#6b7280">C</span><input type="date" id="d0" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"><span style="font-size:11px;color:#6b7280">по</span><input type="date" id="d1" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"></div>
+<div id="filters" style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb"><span style="font-size:11px;color:#6b7280">C</span><input type="date" id="d0" value="${defD0}" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"><span style="font-size:11px;color:#6b7280">по</span><input type="date" id="d1" value="${defD1}" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"></div>
 <div id="root" style="color:#9ca3af">ДДС — загрузка…</div>
 <script>
 var DOMAIN="${esc(domain)}";
@@ -100,14 +104,14 @@ var AC={
 "Материалы (Вентиляция)":"pjOut","Материалы (Отопление)":"pjOut",
 "Материалы (Потолки)":"pjOut","Материалы (Проемы)":"pjOut",
 "Материалы (Стены)":"pjOut","Материалы (Транспорт, Логистика)":"pjOut",
-"Материалы (Электрика)":"pjOut","Материалу черновые":"pjOut",
-"Проектированиевание-Изыскание":"pjOut",
-"Составление исполнительной документации":"pjOut",
-"Услуги по сертификации":"pjOut",
-"Тесты и испытания":"pjOut"
+"Материалы (Электрика)":"pjOut","Материалы черновые":"pjOut",
+"Проектирование-Изыскание":"pjOut",
+"Составление исполнительной документации":"svc",
+"Услуги по сертификации":"svc",
+"Тесты и испытания":"svc"
 };
 
-function fmt(v){if(!v&&v!==0)return"—";if(v)===0)return"—";return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);}
+function fmt(v){if(!v&&v!==0)return"—";if(v===0)return"—";return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);}
 function fmtI(v){return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:0,maximumFractionDigits:0}).format(v||0);}
 function num(s){if(!s&&s!==0)return 0;return parseFloat(String(s).replace(/[^\\d.\\-]/g,""))||0;}
 function padZ(n){return n<10?"0"+n:""+n;}
@@ -137,7 +141,6 @@ function loadAll(entity) {
 return fetch("/api/data", {
 method: "POST",
 headers: {"Content-Type": "application/json"},
-
 body: JSON.stringify({domain: DOMAIN, entity: entity})
 }).then(function(r) {
 return r.ok ? r.json() : Promise.reject("HTTP " + r.status);
@@ -189,6 +192,10 @@ else if(cat==="ins")ins+=out;else if(cat==="bk")bk+=out;
 else if(cat==="lz")lz+=out;else if(cat==="ar")ar+=out;
 else if(cat==="buh")buh+=out;else if(cat==="ntax")ntax+=out;
 else if(cat==="po"){po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
+else if(cat==="svc"){
+if(pOk){pjOut+=out;if(gp)poP[gp]=(poP[gp]||0)+out;}
+else{po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
+}
 else if(cat==="skOut")skOut+=out;
 else if(!pOff){pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}
 }
@@ -228,10 +235,9 @@ else if(r.pjIn){rows.push(TR("Поступления по проектам",r.pj
 if(r.pr){rows.push(TR("Процентные доходы",r.pr,"g",1));tot+=r.pr;}
 if(r.refund){rows.push(TR("Возвраты",r.refund,"g",1));tot+=r.refund;}
 rows.push(SEP("Итого поступлений",tot,"g"));
-rows.push(SEC("Расходы попроектам"));
+rows.push(SEC("Расходы по проектам"));
 var hasPo=Object.keys(r.poP).length>0;
-if(hasPo){PO.forEach(function(p){
-var v=r.poP[p]||0;rows.push(TR(PN[p],v,v?"":"m",1));});}
+if(hasPo){PO.forEach(function(p){var v=r.poP[p]||0;rows.push(TR(PN[p],v,v?"":"m",1));});}
 rows.push(SEP("Итого проекты",r.pjOut,""));
 rows.push(SEC("Офисные расходы"));
 rows.push(TR("Зарплата",r.zp,r.zp?"":"m",1));
@@ -240,7 +246,7 @@ rows.push(TR("Страхование",r.ins,r.ins?"":"m",1));
 rows.push(TR("Банковские комиссии",r.bk,r.bk?"":"m",1));
 rows.push(TR("Лизинг",r.lz,r.lz?"":"m",1));
 rows.push(TR("Аренда",r.ar,r.ar?"":"m",1));
-rows.push(TR("Бухгалтерия",r.buhr.buh?"":"m",1));
+rows.push(TR("Бухгалтерия",r.buh,r.buh?"":"m",1));
 rows.push(TR("Налоги и взносы",r.ntax,r.ntax?"":"m",1));
 rows.push(TR("Прочие офисные",r.po,r.po?"":"m",1));
 var offTotal=r.zp+r.km+r.bk+r.ins+r.lz+r.ar+r.buh+r.ntax+r.po;
@@ -300,7 +306,7 @@ loadAll("categories")
 ]).then(function(res){
 var txAll=res[0],accs=res[1],cats=res[2];
 var rng=getRange();
-var txY=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
+var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
 console.log("[DDS] tx:",txAll.length,"period:",txM.length,"accs:",accs.length,"cats:",cats.length);
 if(txM.length){
 var r=calc(txM,txAll,accs,cats,rng);
@@ -338,4 +344,4 @@ console.log("[DDS] started | domain:",DOMAIN,"| token:",!!TOKEN);
 </script>
 </body>
 </html>`;
-}
+}Ъ
