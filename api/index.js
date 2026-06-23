@@ -105,7 +105,7 @@ var AC={
 "Материалы (Потолки)":"pjOut","Материалы (Проемы)":"pjOut",
 "Материалы (Стены)":"pjOut","Материалы (Транспорт, Логистика)":"pjOut",
 "Материалы (Электрика)":"pjOut","Материалы черновые":"pjOut",
-"Проектирование-Изыскание":"pjOut",
+"Проектирований-Изыскание":"pjOut",
 "Составление исполнительной документации":"svc",
 "Услуги по сертификации":"svc",
 "Тесты и испытания":"svc"
@@ -223,7 +223,7 @@ function SEC(l){return"<tr><td colspan='2' style='padding:7px 6px 2px;font-size:
 function render(r,live){
 var rows=[],tot=0;
 rows.push(TR("Остаток "+r.d0+" · ВСИП",r.vSt,"",""));
-rows.push(TR("Остаток "+r.d0+" · ТТ",r.tSt,r.tSt<0?"r":"",""));
+rows.push(TR("Остаток "+r.d0+" · ТЂ",r.tSt,r.tSt<0?"r":"",""));
 rows.push(SEP("ИТОГО на "+r.d0,r.tS,""));
 rows.push(TR("Остаток "+r.d1+" · ВСИП",r.vEnd,"",""));
 rows.push(TR("Остаток "+r.d1+" · ТТ",r.tEnd,r.tEnd<0?"r":"",""));
@@ -344,6 +344,4 @@ console.log("[DDS] started | domain:",DOMAIN,"| token:",!!TOKEN);
 </script>
 </body>
 </html>`;
-}Ъ
-
-// v3
+}
