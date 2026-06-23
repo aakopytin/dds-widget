@@ -305,7 +305,7 @@ Promise.all([
 loadAll("transaction"),
 loadAll("bank_account"),
 loadAll("categories"),
-loadAll("contractor")
+loadAll("contractor").catch(function(){return[];})
 ]).then(function(res){
 var txAll=res[0],accs=res[1],cats=res[2],ctrs=res[3];
 var ctMap={};ctrs.forEach(function(c){ctMap[c.id]=c.name||"";});
