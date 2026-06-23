@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
   const ALLOWED = ['transaction', 'bank_account', 'categories'];
   if (!ALLOWED.includes(entity)) return res.status(403).json({ error: 'Not allowed' });
 
-  const base = `https://${domain}/api/v1/module/fin/${entity}/list`
+  const base = `https://${domain.replace(/^https?:\/\//i,"").replace(/\/+$/,"")}/api/v1/module/fin/${entity}/list`
     + `?api_key=${encodeURIComponent(apiKey)}&count=50`;
 
   try {
