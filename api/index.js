@@ -89,8 +89,8 @@ var AC={
 "Перевод между счетами (поступление)":"tr",
 "Перевод между счетами (списание)":"tr",
 "Получение кредита":"skIn","Выплата кредита":"skOut",
-"Оказание услуг":"pjIn","Возврат ДС. за заказы":"refund",
-"Проценты к получению":"pr",
+"Оказание услуг":"pjIn","Оказание услуг проекту":"pjIn","Возврат ДС. за заказы":"refund",
+"Проценты к получению":"pr","НДС исходящий":"pr","Налог - НДС":"pr",
 "Зарплата":"zp","Налоги с зарплаты":"zp","Командировки":"km","Страхование":"ins",
 "Расходы на услуги банков":"bk","Банковские услуги":"bk",
 "Расходы на лизинг":"lz",
@@ -105,7 +105,7 @@ var AC={
 "Материалы (Потолки)":"pjOut","Материалы (Проемы)":"pjOut",
 "Материалы (Стены)":"pjOut","Материалы (Транспорт, Логистика)":"pjOut",
 "Материалы (Электрика)":"pjOut","Материалы черновые":"pjOut",
-"Проектирований-Изыскание":"pjOut",
+"Проектирование-Изыскание":"pjOut",
 "Составление исполнительной документации":"svc",
 "Услуги по сертификации":"svc",
 "Тесты и испытания":"svc"
@@ -163,7 +163,7 @@ if(VSIP[an]){vEnd+=inc-out;}
 if(TT[an]) {tEnd+=inc-out;}
 });
 
-var pr=0,zp=0,km=0,bk=0,ins=0,lz=0,ar=0,buh=0,ntax=0,po=0,pjIn=0,pjOut=0,refund=0,trIn=0,trOut=0,skIn=0,skOut=0;
+var pr=0,zp=0,km=0,bk=0,ins=0,lz=0,ar=0,buh=0,ntax=0,po=0,poIn=0,pjIn=0,pjOut=0,refund=0,trIn=0,trOut=0,skIn=0,skOut=0;
 var piP={},poP={},poDet=[],vNet=0,tNet=0;
 
 txMonth.forEach(function(tx){
@@ -185,6 +185,7 @@ if(cat==="pr")pr+=inc;
 else if(cat==="pjIn"&&pOk){pjIn+=inc;piP[gp]=(piP[gp]||0)+inc;}
 else if(cat==="refund"&&pOk)refund+=inc;
 else if(cat==="skIn")skIn+=inc;
+else{poIn+=inc;}
 }
 if(out>0){
 if(cat==="zp")zp+=out;else if(cat==="km")km+=out;
@@ -212,7 +213,7 @@ if(TT[an]) {tSt+=inc-out;}
 
 var te=pjOut+zp+km+bk+ins+lz+ar+buh+ntax+po;
 return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,tS:vSt+tSt,tE:(vEnd||0)+(tEnd||0),
-pr:pr,pjIn:pjIn,refund:refund,pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,lz:lz,ar:ar,buh:buh,ntax:ntax,po:po,te:te,trIn:trIn,trOut:trOut,skIn:skIn,skOut:skOut,
+pr:pr,pjIn:pjIn,refund:refund,poIn:poIn,pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,lz:lz,ar:ar,buh:buh,ntax:ntax,po:po,te:te,trIn:trIn,trOut:trOut,skIn:skIn,skOut:skOut,
 piP:piP,poP:poP,poDet:poDet,cnt:txMonth.length,d0:rng.d0,d1:rng.d1,label:rng.label,ymd:rng.ymd};
 }
 
@@ -223,7 +224,7 @@ function SEC(l){return"<tr><td colspan='2' style='padding:7px 6px 2px;font-size:
 function render(r,live){
 var rows=[],tot=0;
 rows.push(TR("Остаток "+r.d0+" · ВСИП",r.vSt,"",""));
-rows.push(TR("Остаток "+r.d0+" · ТЂ",r.tSt,r.tSt<0?"r":"",""));
+rows.push(TR("Остаток "+r.d0+" · ТТ",r.tSt,r.tSt<0?"r":"",""));
 rows.push(SEP("ИТОГО на "+r.d0,r.tS,""));
 rows.push(TR("Остаток "+r.d1+" · ВСИП",r.vEnd,"",""));
 rows.push(TR("Остаток "+r.d1+" · ТТ",r.tEnd,r.tEnd<0?"r":"",""));
@@ -234,6 +235,7 @@ if(hasPi){PO.forEach(function(p){var v=r.piP[p];if(v){rows.push(TR(PN[p],v,"g",1
 else if(r.pjIn){rows.push(TR("Поступления по проектам",r.pjIn,"g",1));tot+=r.pjIn;}
 if(r.pr){rows.push(TR("Процентные доходы",r.pr,"g",1));tot+=r.pr;}
 if(r.refund){rows.push(TR("Возвраты",r.refund,"g",1));tot+=r.refund;}
+if(r.poIn){rows.push(TR("Прочие поступления",r.poIn,"g",1));tot+=r.poIn;}
 rows.push(SEP("Итого поступлений",tot,"g"));
 rows.push(SEC("Расходы по проектам"));
 var hasPo=Object.keys(r.poP).length>0;
@@ -344,4 +346,4 @@ console.log("[DDS] started | domain:",DOMAIN,"| token:",!!TOKEN);
 </script>
 </body>
 </html>`;
-}
+}Ъ
