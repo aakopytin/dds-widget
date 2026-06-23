@@ -11,7 +11,7 @@ module.exports = async function handler(req, res) {
   const { domain, entity } = req.body || {};
   if (!domain || !entity) return res.status(400).json({ error: 'Missing params' });
 
-  const ALLOWED = ['transaction', 'bank_account', 'categories'];
+  const ALLOWED = ['transaction', 'bank_account', 'categories', 'contractor', 'contractor'];
   if (!ALLOWED.includes(entity)) return res.status(403).json({ error: 'Not allowed' });
 
   const base = `https://${domain.replace(/^https?:\/\//i,"").replace(/\/+$/,"")}/api/v1/module/fin/${entity}/list`
