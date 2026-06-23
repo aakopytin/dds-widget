@@ -287,9 +287,10 @@ var tot=poDet.reduce(function(a,p){return a+p.out;},0);
 s.textContent="Прочие расходы ("+poDet.length+" тр. на "+fmtI(tot)+" р.)";
 d.appendChild(s);
 var t=document.createElement("table");t.style.cssText="width:100%;border-collapse:collapse;margin-top:4px";
+var hasCt=poDet.some(function(p){return!!p.ct;});
 poDet.sort(function(a,b){return b.out-a.out;}).forEach(function(p){
 var tr=document.createElement("tr");
-tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.date+"</td><td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat+"</td>"<td style='padding:2px 4px;font-size:10px;color:#666'>"+(p.ct||"")+"</td><td style='padding:2px 4px;font-size:10px;text-align:right'>"+fmtI(p.out)+"</td>";
+tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.date+"</td><td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat+"</td>"+(hasCt?"<td style='padding:2px 4px;font-size:10px;color:#666'>"+(p.ct||"")+"</td>":"")+"<td style='padding:2px 4px;font-size:10px;text-align:right'>"+fmtI(p.out)+"</td>";
 t.appendChild(tr);
 });
 d.appendChild(t);document.getElementById("root").appendChild(d);
