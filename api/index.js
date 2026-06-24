@@ -79,12 +79,12 @@ var VSIP={
 "Счет РХСБ":1,"Счет Сбербанк":1,"Счет Совкомбанк":1
 };
 var TT={"Альфа ТТ (ВСИП)":1};
-var OFF={24:1,26:1,27:1,28:1};
+var OFF={24:1,26:1,27:1};
 var PN={1:"Кемерово",3:"Южно-Сахалинск",13:"Барнаул",12:"Киров",
 23:"Сыктывкар",9:"Рузаевка",7:"Иволгинск",6:"Десногорск",
-100:"Центральный договор",101:"Прочие проекты"};
-var PO=[1,3,13,12,23,9,7,6,100,101];
-var PG={2:100,18:100,19:100,29:100,30:100,31:100,32:100,33:100,17:101,20:101,22:101};
+102:"Голутвинский",100:"Центральный договор",101:"Прочие проекты"};
+var PO=[1,3,13,12,23,9,7,6,102,100,101];
+var PG={2:100,18:100,19:100,29:100,30:100,31:100,32:100,33:102,17:101,20:101,22:101};
 var AC={
 "Перевод между счетами (поступление)":"tr",
 "Перевод между счетами (списание)":"tr",
@@ -101,7 +101,7 @@ var AC={
 "Оборудование":"po","Возвраты клиентам":"po","Нераспределенные":"po",
 "Нераспределенные (списание)":"po","Офис":"po",
 "СМР (Без детализации)":"pjOut","СМР Вент+кондиц":"pjOut",
-"Материалы (Вентиляхия)":"pjOut","Материалы (Отопление)":"pjOut",
+"Материалы (Вентиляция)":"pjOut","Материалы (Отопление)":"pjOut",
 "Материалы (Потолки)":"pjOut","Материалы (Проемы)":"pjOut",
 "Материалы (Стены)":"pjOut","Материалы (Транспорт, Логистика)":"pjOut",
 "Материалы (Электрика)":"pjOut","Материалы черновые":"pjOut",
@@ -149,7 +149,7 @@ return d.items || [];
 });
 }
 
-function calc(txMonth,txAll,accs,cats,ctMap,rng){
+function calc(txMonth,txAll,accs,cats,rng){
 var aMap={},cMap={};
 accs.forEach(function(a){aMap[a.id]=a.name||"";});
 cats.forEach(function(c){cMap[c.id]=c.name||"";});
@@ -192,10 +192,10 @@ if(cat==="zp")zp+=out;else if(cat==="km")km+=out;
 else if(cat==="ins")ins+=out;else if(cat==="bk")bk+=out;
 else if(cat==="lz")lz+=out;else if(cat==="ar")ar+=out;
 else if(cat==="buh")buh+=out;else if(cat==="ntax")ntax+=out;
-else if(cat==="po"){po+=out;poDet.push({date:tx.date,cat:cn,ct:ctMap[tx.contractor_id]||"",out:out});}
+else if(cat==="po"){po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
 else if(cat==="svc"){
 if(pOk){pjOut+=out;if(gp)poP[gp]=(poP[gp]||0)+out;}
-else{po+=out;poDet.push({date:tx.date,cat:cn,ct:ctMap[tx.contractor_id]||"",out:out});}
+else{po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
 }
 else if(cat==="skOut")skOut+=out;
 else if(!pOff){pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}
@@ -234,8 +234,8 @@ var hasPi=Object.keys(r.piP).length>0;
 if(hasPi){PO.forEach(function(p){var v=r.piP[p];if(v){rows.push(TR(PN[p],v,"g",1));tot+=v;}});}
 else if(r.pjIn){rows.push(TR("Поступления по проектам",r.pjIn,"g",1));tot+=r.pjIn;}
 if(r.pr){rows.push(TR("Процентные доходы",r.pr,"g",1));tot+=r.pr;}
-if(r.refund){rows.push(TR("Возвраты по проектам",r.refund,"g",1));tot+=r.refund;}
-if(r.poIn){rows.push(TR("Возвраты по офису",r.poIn,"g",1));tot+=r.poIn;}
+if(r.refund){rows.push(TR("Возвраты",r.refund,"g",1));tot+=r.refund;}
+if(r.poIn){rows.push(TR("Прочие поступления",r.poIn,"g",1));tot+=r.poIn;}
 rows.push(SEP("Итого поступлений",tot,"g"));
 rows.push(SEC("Расходы по проектам"));
 var hasPo=Object.keys(r.poP).length>0;
@@ -287,10 +287,9 @@ var tot=poDet.reduce(function(a,p){return a+p.out;},0);
 s.textContent="Прочие расходы ("+poDet.length+" тр. на "+fmtI(tot)+" р.)";
 d.appendChild(s);
 var t=document.createElement("table");t.style.cssText="width:100%;border-collapse:collapse;margin-top:4px";
-var hasCt=poDet.some(function(p){return!!p.ct;});
 poDet.sort(function(a,b){return b.out-a.out;}).forEach(function(p){
 var tr=document.createElement("tr");
-tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.date+"</td><td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat+"</td>"+(hasCt?"<td style='padding:2px 4px;font-size:10px;color:#666'>"+(p.ct||"")+"</td>":"")+"<td style='padding:2px 4px;font-size:10px;text-align:right'>"+fmtI(p.out)+"</td>";
+tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.date+"</td><td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat+"</td><td style='padding:2px 4px;font-size:10px;text-align:right'>"+fmtI(p.out)+"</td>";
 t.appendChild(tr);
 });
 d.appendChild(t);document.getElementById("root").appendChild(d);
@@ -305,16 +304,14 @@ if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
 Promise.all([
 loadAll("transaction"),
 loadAll("bank_account"),
-loadAll("categories"),
-loadAll("contractor").catch(function(){return[];})
+loadAll("categories")
 ]).then(function(res){
-var txAll=res[0],accs=res[1],cats=res[2],ctrs=res[3];
-var ctMap={};ctrs.forEach(function(c){ctMap[c.id]=c.name||"";});
+var txAll=res[0],accs=res[1],cats=res[2];
 var rng=getRange();
 var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
-console.log("[DDS] tx:",txAll.length,"period:",txM.length,"accs:",accs.length,"cats:",cats.length,"ctrs:",ctrs.length);
+console.log("[DDS] tx:",txAll.length,"period:",txM.length,"accs:",accs.length,"cats:",cats.length);
 if(txM.length){
-var r=calc(txM,txAll,accs,cats,ctMap,rng);
+var r=calc(txM,txAll,accs,cats,rng);
 el.innerHTML=render(r,true);
 renderPoDet(r.poDet);
 }else{
