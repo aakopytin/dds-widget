@@ -74,17 +74,14 @@ var DOMAIN="${esc(domain)}";
 var ACCOUNT_ID="${esc(accountId)}";
 var TOKEN="${esc(accessToken)}";
 
-var VSIP={
-"Альфа ВСИП":1,"ВСИП Депозиты":1,"Счет ВТБ":1,
-"Счет РХСБ":1,"Счет Сбербанк":1,"Счет Совкомбанк":1
-};
-var TT={"Альфа ТТ (ВСИП)":1};
-var OFF={24:1,26:1,27:1};
-var PN={1:"Кемерово",3:"Южно-Сахалинск",13:"Барнаул",12:"Киров",
+var VSIP={2:1,4:1,5:1,6:1,7:1,8:1};
+var TT={18:1};
+var OFF={24:1,26:1};
+var PN={1:"Кемерово",3:"Южно-Сахалинск",25:"Южно-Сахалинск",13:"Барнаул",12:"Киров",
 23:"Сыктывкар",9:"Рузаевка",7:"Иволгинск",6:"Десногорск",
 102:"Голутвинский",100:"Центральный договор",101:"Прочие проекты"};
 var PO=[1,3,13,12,23,9,7,6,102,100,101];
-var PG={2:100,18:100,19:100,29:100,30:100,31:100,32:100,33:102,17:101,20:101,22:101};
+var PG={2:100,4:101,18:100,19:100,21:101,29:100,30:100,31:100,32:100,33:102,17:101,20:101,22:101};
 var AC={
 "Перевод между счетами (поступление)":"tr",
 "Перевод между счетами (списание)":"tr",
@@ -149,28 +146,27 @@ return d.items || [];
 });
 }
 
-function calc(txMonth,txAll,accs,cats,rng){
-var aMap={},cMap={};
-accs.forEach(function(a){aMap[a.id]=a.name||"";});
+function calc(txMonth,txAll,cats,rng){
+var cMap={};
 cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
 var vEnd=0, tEnd=0;
 txAll.forEach(function(tx){
 if(!tx.date||tx.date>rng.s1)return;
-var an=aMap[tx.org_account_id]||"";
+var aid=tx.org_account_id;
 var inc=num(tx.income)||0, out=num(tx.outcome)||0;
-if(VSIP[an]){vEnd+=inc-out;}
-if(TT[an]) {tEnd+=inc-out;}
+if(VSIP[aid]){vEnd+=inc-out;}
+if(TT[aid])  {tEnd+=inc-out;}
 });
 
 var pr=0,zp=0,km=0,bk=0,ins=0,lz=0,ar=0,buh=0,ntax=0,po=0,poIn=0,pjIn=0,pjOut=0,refund=0,trIn=0,trOut=0,skIn=0,skOut=0;
 var piP={},poP={},poDet=[],vNet=0,tNet=0;
 
 txMonth.forEach(function(tx){
-var an=aMap[tx.org_account_id]||"",cn=cMap[tx.category_id]||"";
+var aid=tx.org_account_id,cn=cMap[tx.category_id]||"";
 var pid=tx.project_id||0;
 var inc=num(tx.income)||0,out=num(tx.outcome)||0;
-var isV=!!VSIP[an],isT=!!TT[an];
+var isV=!!VSIP[aid],isT=!!TT[aid];
 if(!isV&&!isT)return;
 if(isV)vNet+=inc-out;if(isT)tNet+=inc-out;
 var rp=pid,gp=(rp&&PG[rp])?PG[rp]:rp;
@@ -205,10 +201,10 @@ else if(!pOff){pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}
 var vSt=0, tSt=0;
 txAll.forEach(function(tx){
 if(!tx.date||tx.date>=rng.s0)return;
-var an=aMap[tx.org_account_id]||"";
+var aid=tx.org_account_id;
 var inc=num(tx.income)||0, out=num(tx.outcome)||0;
-if(VSIP[an]){vSt+=inc-out;}
-if(TT[an]) {tSt+=inc-out;}
+if(VSIP[aid]){vSt+=inc-out;}
+if(TT[aid])  {tSt+=inc-out;}
 });
 
 var te=pjOut+zp+km+bk+ins+lz+ar+buh+ntax+po;
@@ -303,15 +299,14 @@ if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
 
 Promise.all([
 loadAll("transaction"),
-loadAll("bank_account"),
 loadAll("categories")
 ]).then(function(res){
-var txAll=res[0],accs=res[1],cats=res[2];
+var txAll=res[0],cats=res[1];
 var rng=getRange();
 var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
-console.log("[DDS] tx:",txAll.length,"period:",txM.length,"accs:",accs.length,"cats:",cats.length);
+console.log("[DDS] tx:",txAll.length,"period:",txM.length,"cats:",cats.length);
 if(txM.length){
-var r=calc(txM,txAll,accs,cats,rng);
+var r=calc(txM,txAll,cats,rng);
 el.innerHTML=render(r,true);
 renderPoDet(r.poDet);
 }else{
