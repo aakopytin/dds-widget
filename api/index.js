@@ -1,5 +1,5 @@
 module.exports.config = { api: { bodyParser: false } };
-
+ 
 function readBody(req) {
 return new Promise(function(resolve) {
 var d = '';
@@ -8,7 +8,7 @@ req.on('end', function() { resolve(d); });
 req.on('error',function() { resolve(''); });
 });
 }
-
+ 
 function parseForm(body) {
 var r = {};
 if (!body) return r;
@@ -20,12 +20,12 @@ decodeURIComponent(pair.slice(i+1).replace(/\+/g,' '));
 });
 return r;
 }
-
+ 
 module.exports = async function handler(req, res) {
 res.setHeader('X-Frame-Options', 'ALLOWALL');
 res.setHeader('Content-Security-Policy', "frame-ancestors *");
 res.setHeader('Content-Type', 'text/html; charset=utf-8');
-
+ 
 if (req.method === 'POST') {
 var raw = await readBody(req);
 var fields = parseForm(raw);
@@ -35,15 +35,15 @@ var accessToken = fields['auth[access_token]'] || '';
 console.log('[DDS] POST | domain:', domain, '| account:', accountId, '| hasToken:', !!accessToken);
 return res.status(200).send(html(domain, accountId, accessToken));
 }
-
+ 
 return res.status(200).send('<html><body style="font-family:sans-serif;padding:20px">' +
 '<h3>&#x2713; ДДС виджет работает</h3></body></html>');
 };
-
+ 
 function esc(s) {
 return String(s||'').replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
 }
-
+ 
 function html(domain, accountId, accessToken) {
 var now=new Date(),ny=now.getFullYear(),nm=now.getMonth(),nd=now.getDate();
 var npad=function(n){return n<10?"0"+n:""+n;};
@@ -73,14 +73,14 @@ details table td{font-size:10px;color:#555;padding:2px 4px}
 var DOMAIN="${esc(domain)}";
 var ACCOUNT_ID="${esc(accountId)}";
 var TOKEN="${esc(accessToken)}";
-
+ 
 var VSIP={2:1,4:1,5:1,6:1,7:1,8:1};
 var TT={18:1};
 var OFF={24:1,26:1};
-var PN={1:"Кемерово",3:"Южно-Сахалинск",25:"Южно-Сахалинск",13:"Барнаул",12:"Киров",
+var PN={1:"Кемерово",3:"Южно-Сахалинск",10:"Большое Болдино",25:"Южно-Сахалинск",13:"Барнаул",12:"Киров",
 23:"Сыктывкар",9:"Рузаевка",7:"Иволгинск",6:"Десногорск",
 102:"Голутвинский",100:"Центральный договор",101:"Прочие проекты"};
-var PO=[1,3,13,12,23,9,7,6,102,100,101];
+var PO=[1,3,10,13,12,23,9,7,6,102,100,101];
 var PG={2:100,4:101,18:100,19:100,21:101,29:100,30:100,31:100,32:100,33:102,17:101,20:101,22:101};
 var AC={
 "Перевод между счетами (поступление)":"tr",
@@ -94,7 +94,7 @@ var AC={
 "Аренда":"ar",
 "Бухгалтерия":"buh",
 "Налоги и взносы":"ntax","Налоги - НДС":"ntax",
-"Прочее":"po","Интернет и связь":"po","Проценты к уплате":"po",
+"Прочее":"po","Интернет и связь":"po","Проценты к уплате":"pct",
 "Оборудование":"po","Возвраты клиентам":"po","Нераспределенные":"po",
 "Нераспределенные (списание)":"po","Офис":"po",
 "СМР (Без детализации)":"pjOut","СМР Вент+кондиц":"pjOut",
@@ -105,9 +105,9 @@ var AC={
 "Проектирование-Изыскание":"pjOut",
 "Составление исполнительной документации":"svc",
 "Услуги по сертификации":"svc",
-"Тесты и испытания":"svc"
+"Тесты и испытания":"svc","Банковские гарантии":"bg"
 };
-
+ 
 function fmt(v){if(!v&&v!==0)return"—";if(v===0)return"—";return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);}
 function fmtI(v){return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:0,maximumFractionDigits:0}).format(v||0);}
 function num(s){if(!s&&s!==0)return 0;return parseFloat(String(s).replace(/[^\\d.\\-]/g,""))||0;}
@@ -128,12 +128,12 @@ var mo=["Январь","Февраль","Март","Апрель","Май","Ию
 var label=s0.slice(0,7)===s1.slice(0,7)?mo[parseInt(pts0[1],10)-1]+" "+pts0[0]:d0+" — "+d1;
 return{ymd:ymd,s0:s0,s1:s1,d0:d0,d1:d1,label:label};
 }
-
+ 
 var lk=function(ym){return"dds_"+ACCOUNT_ID+"_"+ym;};
 function getF(ym){try{var s=localStorage.getItem(lk(ym));return s?JSON.parse(s):null;}catch(e){return null;}}
 function setF(ym,v,t){try{localStorage.setItem(lk(ym),JSON.stringify({v:v,t:t}));}catch(e){}}
 function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
-
+ 
 function loadAll(entity) {
 return fetch("/api/data", {
 method: "POST",
@@ -145,11 +145,11 @@ return r.ok ? r.json() : Promise.reject("HTTP " + r.status);
 return d.items || [];
 });
 }
-
+ 
 function calc(txMonth,txAll,cats,rng){
 var cMap={};
 cats.forEach(function(c){cMap[c.id]=c.name||"";});
-
+ 
 var vEnd=0, tEnd=0;
 txAll.forEach(function(tx){
 if(!tx.date||tx.date>rng.s1)return;
@@ -158,10 +158,10 @@ var inc=num(tx.income)||0, out=num(tx.outcome)||0;
 if(VSIP[aid]){vEnd+=inc-out;}
 if(TT[aid])  {tEnd+=inc-out;}
 });
-
-var pr=0,zp=0,km=0,bk=0,ins=0,lz=0,ar=0,buh=0,ntax=0,po=0,poIn=0,pjIn=0,pjOut=0,refund=0,trIn=0,trOut=0,skIn=0,skOut=0;
+ 
+var pr=0,zp=0,km=0,bk=0,ins=0,lz=0,ar=0,buh=0,ntax=0,po=0,pct=0,bg=0,poIn=0,pjIn=0,pjOut=0,refund=0,trIn=0,trOut=0,skIn=0,skOut=0;
 var piP={},poP={},poDet=[],vNet=0,tNet=0;
-
+ 
 txMonth.forEach(function(tx){
 var aid=tx.org_account_id,cn=cMap[tx.category_id]||"";
 var pid=tx.project_id||0;
@@ -193,11 +193,13 @@ else if(cat==="svc"){
 if(pOk){pjOut+=out;if(gp)poP[gp]=(poP[gp]||0)+out;}
 else{po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
 }
+else if(cat==="pct")pct+=out;
+else if(cat==="bg"){if(pOff)bg+=out;else{pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}}
 else if(cat==="skOut")skOut+=out;
 else if(!pOff){pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}
 }
 });
-
+ 
 var vSt=0, tSt=0;
 txAll.forEach(function(tx){
 if(!tx.date||tx.date>=rng.s0)return;
@@ -206,17 +208,17 @@ var inc=num(tx.income)||0, out=num(tx.outcome)||0;
 if(VSIP[aid]){vSt+=inc-out;}
 if(TT[aid])  {tSt+=inc-out;}
 });
-
-var te=pjOut+zp+km+bk+ins+lz+ar+buh+ntax+po;
+ 
+var te=pjOut+zp+km+bk+ins+lz+ar+buh+ntax+po+pct+bg;
 return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,tS:vSt+tSt,tE:(vEnd||0)+(tEnd||0),
-pr:pr,pjIn:pjIn,refund:refund,poIn:poIn,pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,lz:lz,ar:ar,buh:buh,ntax:ntax,po:po,te:te,trIn:trIn,trOut:trOut,skIn:skIn,skOut:skOut,
+pr:pr,pjIn:pjIn,refund:refund,poIn:poIn,pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,lz:lz,ar:ar,buh:buh,ntax:ntax,po:po,pct:pct,bg:bg,te:te,trIn:trIn,trOut:trOut,skIn:skIn,skOut:skOut,
 piP:piP,poP:poP,poDet:poDet,cnt:txMonth.length,d0:rng.d0,d1:rng.d1,label:rng.label,ymd:rng.ymd};
 }
-
+ 
 function TR(l,v,cls,ind){var n=fmt(v),c="";if(cls==="g"&&v>0)c="color:#16a34a";if(cls==="r"&&v<0)c="color:#dc2626";if(cls==="m")c="color:#9ca3af";var s1="padding:4px 6px"+(ind?";padding-left:14px":"");var s2="padding:4px 6px;text-align:right;white-space:nowrap"+(c?";"+c:"");return"<tr><td style='"+s1+"'>"+l+"</td><td style='"+s2+"'>"+n+"</td></tr>";}
 function SEP(l,v,cls){var n=fmt(v),c="";if(cls==="g"&&v>0)c="color:#16a34a";if(cls==="r"&&v<0)c="color:#dc2626";var s="padding:4px 6px;font-weight:600;border-top:1px solid #e5e7eb";return"<tr><td style='"+s+"'>"+l+"</td><td style='"+s+";text-align:right;white-space:nowrap"+(c?";"+c:"")+"'>"+n+"</td></tr>";}
 function SEC(l){return"<tr><td colspan='2' style='padding:7px 6px 2px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-top:1px solid #e5e7eb'>"+l+"</td></tr>";}
-
+ 
 function render(r,live){
 var rows=[],tot=0;
 rows.push(TR("Остаток "+r.d0+" · ВСИП",r.vSt,"",""));
@@ -235,19 +237,21 @@ if(r.poIn){rows.push(TR("Прочие поступления",r.poIn,"g",1));tot
 rows.push(SEP("Итого поступлений",tot,"g"));
 rows.push(SEC("Расходы по проектам"));
 var hasPo=Object.keys(r.poP).length>0;
-if(hasPo){PO.forEach(function(p){var v=r.poP[p]||0;rows.push(TR(PN[p],v,v?"":"m",1));});}
+if(hasPo){PO.forEach(function(p){var v=r.poP[p];if(v)rows.push(TR(PN[p],v,"",1));});}
 rows.push(SEP("Итого проекты",r.pjOut,""));
 rows.push(SEC("Офисные расходы"));
-rows.push(TR("Зарплата",r.zp,r.zp?"":"m",1));
-rows.push(TR("Командировочные",r.km,r.km?"":"m",1));
-rows.push(TR("Страхование",r.ins,r.ins?"":"m",1));
-rows.push(TR("Банковские комиссии",r.bk,r.bk?"":"m",1));
-rows.push(TR("Лизинг",r.lz,r.lz?"":"m",1));
-rows.push(TR("Аренда",r.ar,r.ar?"":"m",1));
-rows.push(TR("Бухгалтерия",r.buh,r.buh?"":"m",1));
-rows.push(TR("Налоги и взносы",r.ntax,r.ntax?"":"m",1));
-rows.push(TR("Прочие офисные",r.po,r.po?"":"m",1));
-var offTotal=r.zp+r.km+r.bk+r.ins+r.lz+r.ar+r.buh+r.ntax+r.po;
+if(r.zp)rows.push(TR("Зарплата",r.zp,"",1));
+if(r.km)rows.push(TR("Командировочные",r.km,"",1));
+if(r.ins)rows.push(TR("Страхование",r.ins,"",1));
+if(r.bk)rows.push(TR("Банковские комиссии",r.bk,"",1));
+if(r.lz)rows.push(TR("Лизинг",r.lz,"",1));
+if(r.ar)rows.push(TR("Аренда",r.ar,"",1));
+if(r.buh)rows.push(TR("Бухгалтерия",r.buh,"",1));
+if(r.ntax)rows.push(TR("Налоги и взносы",r.ntax,"",1));
+if(r.pct)rows.push(TR("Проценты к уплате",r.pct,"",1));
+if(r.bg)rows.push(TR("Банковские гарантии",r.bg,"",1));
+if(r.po)rows.push(TR("Прочие офисные",r.po,"",1));
+var offTotal=r.zp+r.km+r.bk+r.ins+r.lz+r.ar+r.buh+r.ntax+r.po+r.pct+r.bg;
 rows.push(SEP("Итого офисные",offTotal,""));
 var trNetto=r.trIn-r.trOut;
 var ctrl=r.tS+tot+r.skIn-(r.te+r.skOut-trNetto)-r.tE,cOk=Math.abs(ctrl)<1;
@@ -275,7 +279,7 @@ return'<div style="display:flex;align-items:flex-start;justify-content:space-bet
 +'<table>'+rows.join('')+'</table>'
 +'<div style="margin-top:5px;font-size:10px;color:#9ca3af">обновлено: '+new Date().toLocaleTimeString("ru-RU")+'</div>';
 }
-
+ 
 function renderPoDet(poDet){
 if(!poDet||!poDet.length)return;
 var d=document.createElement("details"),s=document.createElement("summary");
@@ -290,13 +294,13 @@ t.appendChild(tr);
 });
 d.appendChild(t);document.getElementById("root").appendChild(d);
 }
-
+ 
 function load(reset){
 var el=document.getElementById("root"),rng=getRange();
 if(reset)clrF(rng.ymd);
 var s=document.getElementById("st");
 if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
-
+ 
 Promise.all([
 loadAll("transaction"),
 loadAll("categories")
@@ -325,7 +329,7 @@ el.innerHTML="<div style='padding:12px;color:#dc2626'>Ошибка: "+e+"</div>"
 console.error("[DDS]",e);
 });
 }
-
+ 
 (function(){
 var now=new Date(),y=now.getFullYear(),m=now.getMonth();
 var end=Math.min(now.getDate(),new Date(y,m+1,0).getDate());
@@ -334,7 +338,7 @@ var d0el=document.getElementById("d0"),d1el=document.getElementById("d1");
 if(d0el){d0el.value=y+"-"+pad(m+1)+"-01";d0el.addEventListener("change",function(){load(false);});}
 if(d1el){d1el.value=y+"-"+pad(m+1)+"-"+pad(end);d1el.addEventListener("change",function(){load(false);});}
 })();
-
+ 
 load(false);
 setInterval(function(){load(false);},5*60*1000);
 console.log("[DDS] started | domain:",DOMAIN,"| token:",!!TOKEN);
