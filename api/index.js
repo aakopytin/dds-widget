@@ -1,348 +1,653 @@
-module.exports.config = { api: { bodyParser: false } };
- 
-function readBody(req) {
-return new Promise(function(resolve) {
-var d = '';
-req.on('data', function(c) { d += c.toString(); });
-req.on('end', function() { resolve(d); });
-req.on('error',function() { resolve(''); });
-});
-}
- 
-function parseForm(body) {
-var r = {};
-if (!body) return r;
-body.split('&').forEach(function(pair) {
-var i = pair.indexOf('=');
-if (i < 0) return;
-r[decodeURIComponent(pair.slice(0, i).replace(/\+/g,' '))] =
-decodeURIComponent(pair.slice(i+1).replace(/\+/g,' '));
-});
-return r;
-}
- 
-module.exports = async function handler(req, res) {
-res.setHeader('X-Frame-Options', 'ALLOWALL');
-res.setHeader('Content-Security-Policy', "frame-ancestors *");
-res.setHeader('Content-Type', 'text/html; charset=utf-8');
- 
-if (req.method === 'POST') {
-var raw = await readBody(req);
-var fields = parseForm(raw);
-var domain = fields['domain'] || '';
-var accountId = fields['account[id]'] || '';
-var accessToken = fields['auth[access_token]'] || '';
-console.log('[DDS] POST | domain:', domain, '| account:', accountId, '| hasToken:', !!accessToken);
-return res.status(200).send(html(domain, accountId, accessToken));
-}
- 
-return res.status(200).send('<html><body style="font-family:sans-serif;padding:20px">' +
-'<h3>&#x2713; ДДС виджет работает</h3></body></html>');
-};
- 
-function esc(s) {
-return String(s||'').replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
-}
- 
-function html(domain, accountId, accessToken) {
-var now=new Date(),ny=now.getFullYear(),nm=now.getMonth(),nd=now.getDate();
-var npad=function(n){return n<10?"0"+n:""+n;};
-var defD0=ny+"-"+npad(nm+1)+"-01";
-var defD1=ny+"-"+npad(nm+1)+"-"+npad(nd);
-return `<!DOCTYPE html>
+// ДДС виджет — Сводный финансовый отчёт
+// HTML встроен инлайн для деплоя на Vercel без дополнительных файлов
+
+const HTML = `<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ДДС</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сводный финансовый отчёт</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:12px;
-background:#f8f9fd;color:#111827;padding:10px}
-table{width:100%;border-collapse:collapse}
-td{padding:4px 6px}
-td:last-child{text-align:right;white-space:nowrap}
-details summary{font-size:10px;color:#9ca3af;cursor:pointer;padding:4px 0}
-details table td{font-size:10px;color:#555;padding:2px 4px}
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 11px;
+    background: #f8f9fd;
+    padding: 12px;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .title { font-size: 14px; font-weight: 700; color: #111827; }
+  .subtitle { font-size: 10px; color: #9ca3af; margin-left: 8px; }
+  .status-row { display: flex; gap: 6px; align-items: center; }
+  #status { font-size: 10.5px; color: #d97706; }
+  #refresh-btn {
+    background: none;
+    border: 1px solid #d1d5db;
+    color: #6b7280;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  #refresh-btn:hover { background: #f3f4f6; }
+  #content { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th, td { white-space: nowrap; }
 </style>
 </head>
 <body>
-<div id="filters" style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb"><span style="font-size:11px;color:#6b7280">C</span><input type="date" id="d0" value="${defD0}" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"><span style="font-size:11px;color:#6b7280">по</span><input type="date" id="d1" value="${defD1}" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 4px;color:#374151"></div>
-<div id="root" style="color:#9ca3af">ДДС — загрузка…</div>
+
+<div class="header">
+  <div>
+    <span class="title">&#128202; Сводный финансовый отчёт</span>
+    <span class="subtitle">Все суммы в тысячах рублей</span>
+  </div>
+  <div class="status-row">
+    <span id="status">&#9679; инициализация...</span>
+    <button id="refresh-btn" title="Обновить">&#8635;</button>
+  </div>
+</div>
+
+<div id="content">
+  <div style="padding:20px;text-align:center;color:#6b7280">&#8987; Загружаем данные...</div>
+</div>
+
 <script>
-var DOMAIN="${esc(domain)}";
-var ACCOUNT_ID="${esc(accountId)}";
-var TOKEN="${esc(accessToken)}";
- 
-var VSIP={2:1,4:1,5:1,6:1,7:1,8:1};
-var TT={18:1};
-var OFF={24:1,26:1};
-var PN={1:"Кемерово",3:"Южно-Сахалинск",10:"Большое Болдино",25:"Южно-Сахалинск",13:"Барнаул",12:"Киров",
-23:"Сыктывкар",9:"Рузаевка",7:"Иволгинск",6:"Десногорск",
-102:"Голутвинский",100:"Центральный договор",101:"Прочие проекты"};
-var PO=[1,3,10,13,12,23,9,7,6,102,100,101];
-var PG={2:100,4:101,18:100,19:100,21:101,29:100,30:100,31:100,32:100,33:102,17:101,20:101,22:101};
-var AC={
-"Перевод между счетами (поступление)":"tr",
-"Перевод между счетами (списание)":"tr",
-"Получение кредита":"skIn","Выплата кредита":"skOut",
-"Оказание услуг":"pjIn","Оказание услуг проекту":"pjIn","Возврат ДС. за заказы":"refund",
-"Проценты к получению":"pr","НДС исходящий":"pr","Налог - НДС":"pr",
-"Зарплата":"zp","Налоги с зарплаты":"zp","Командировки":"km","Страхование":"ins",
-"Расходы на услуги банков":"bk","Банковские услуги":"bk",
-"Расходы на лизинг":"lz",
-"Аренда":"ar",
-"Бухгалтерия":"buh",
-"Налоги и взносы":"ntax","Налоги - НДС":"ntax",
-"Прочее":"po","Интернет и связь":"po","Проценты к уплате":"pct",
-"Оборудование":"po","Возвраты клиентам":"po","Нераспределенные":"po",
-"Нераспределенные (списание)":"po","Офис":"po",
-"СМР (Без детализации)":"pjOut","СМР Вент+кондиц":"pjOut",
-"Материалы (Вентиляция)":"pjOut","Материалы (Отопление)":"pjOut",
-"Материалы (Потолки)":"pjOut","Материалы (Проемы)":"pjOut",
-"Материалы (Стены)":"pjOut","Материалы (Транспорт, Логистика)":"pjOut",
-"Материалы (Электрика)":"pjOut","Материалы черновые":"pjOut",
-"Проектирование-Изыскание":"pjOut",
-"Составление исполнительной документации":"svc",
-"Услуги по сертификации":"svc",
-"Тесты и испытания":"svc","Банковские гарантии":"bg"
-};
- 
-function fmt(v){if(!v&&v!==0)return"—";if(v===0)return"—";return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);}
-function fmtI(v){return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:0,maximumFractionDigits:0}).format(v||0);}
-function num(s){if(!s&&s!==0)return 0;return parseFloat(String(s).replace(/[^\\d.\\-]/g,""))||0;}
-function padZ(n){return n<10?"0"+n:""+n;}
-function getRange(){
-var d0el=document.getElementById("d0"),d1el=document.getElementById("d1");
-var now=new Date(),y=now.getFullYear(),m=now.getMonth();
-var end=Math.min(now.getDate(),new Date(y,m+1,0).getDate());
-var defS0=y+"-"+padZ(m+1)+"-01";
-var defS1=y+"-"+padZ(m+1)+"-"+padZ(end);
-var s0=(d0el&&d0el.value)||defS0;
-var s1=(d1el&&d1el.value)||defS1;
-var pts0=s0.split("-"),pts1=s1.split("-");
-var d0=padZ(parseInt(pts0[2],10))+"."+padZ(parseInt(pts0[1],10))+"."+pts0[0];
-var d1=padZ(parseInt(pts1[2],10))+"."+padZ(parseInt(pts1[1],10))+"."+pts1[0];
-var ymd=s0.slice(0,7);
-var mo=["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-var label=s0.slice(0,7)===s1.slice(0,7)?mo[parseInt(pts0[1],10)-1]+" "+pts0[0]:d0+" — "+d1;
-return{ymd:ymd,s0:s0,s1:s1,d0:d0,d1:d1,label:label};
-}
- 
-var lk=function(ym){return"dds_"+ACCOUNT_ID+"_"+ym;};
-function getF(ym){try{var s=localStorage.getItem(lk(ym));return s?JSON.parse(s):null;}catch(e){return null;}}
-function setF(ym,v,t){try{localStorage.setItem(lk(ym),JSON.stringify({v:v,t:t}));}catch(e){}}
-function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
- 
-function loadAll(entity) {
-return fetch("/api/data", {
-method: "POST",
-headers: {"Content-Type": "application/json"},
-body: JSON.stringify({domain: DOMAIN, entity: entity})
-}).then(function(r) {
-return r.ok ? r.json() : Promise.reject("HTTP " + r.status);
-}).then(function(d) {
-return d.items || [];
-});
-}
- 
-function calc(txMonth,txAll,cats,rng){
-var cMap={};
-cats.forEach(function(c){cMap[c.id]=c.name||"";});
- 
-var vEnd=0, tEnd=0;
-txAll.forEach(function(tx){
-if(!tx.date||tx.date>rng.s1)return;
-var aid=tx.org_account_id;
-var inc=num(tx.income)||0, out=num(tx.outcome)||0;
-if(VSIP[aid]){vEnd+=inc-out;}
-if(TT[aid])  {tEnd+=inc-out;}
-});
- 
-var pr=0,zp=0,km=0,bk=0,ins=0,lz=0,ar=0,buh=0,ntax=0,po=0,pct=0,bg=0,poIn=0,pjIn=0,pjOut=0,refund=0,trIn=0,trOut=0,skIn=0,skOut=0;
-var piP={},poP={},poDet=[],vNet=0,tNet=0;
- 
-txMonth.forEach(function(tx){
-var aid=tx.org_account_id,cn=cMap[tx.category_id]||"";
-var pid=tx.project_id||0;
-var inc=num(tx.income)||0,out=num(tx.outcome)||0;
-var isV=!!VSIP[aid],isT=!!TT[aid];
-if(!isV&&!isT)return;
-if(isV)vNet+=inc-out;if(isT)tNet+=inc-out;
-var rp=pid,gp=(rp&&PG[rp])?PG[rp]:rp;
-var pOk=gp&&!!PN[gp],pOff=rp&&!!OFF[rp];
-var cat=AC[cn];
-if(cat==="tr"){
-if(rp===24||rp===26){if(inc>0)trIn+=inc;if(out>0)trOut+=out;}
-return;
-}
-if(inc>0){
-if(cat==="pr")pr+=inc;
-else if(cat==="pjIn"&&pOk){pjIn+=inc;piP[gp]=(piP[gp]||0)+inc;}
-else if(cat==="refund"&&pOk)refund+=inc;
-else if(cat==="skIn")skIn+=inc;
-else{poIn+=inc;}
-}
-if(out>0){
-if(cat==="zp")zp+=out;else if(cat==="km")km+=out;
-else if(cat==="ins")ins+=out;else if(cat==="bk")bk+=out;
-else if(cat==="lz")lz+=out;else if(cat==="ar")ar+=out;
-else if(cat==="buh")buh+=out;else if(cat==="ntax")ntax+=out;
-else if(cat==="po"){po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
-else if(cat==="svc"){
-if(pOk){pjOut+=out;if(gp)poP[gp]=(poP[gp]||0)+out;}
-else{po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
-}
-else if(cat==="pct")pct+=out;
-else if(cat==="bg"){if(pOff)bg+=out;else{pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}}
-else if(cat==="skOut")skOut+=out;
-else if(!pOff){pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}
-}
-});
- 
-var vSt=0, tSt=0;
-txAll.forEach(function(tx){
-if(!tx.date||tx.date>=rng.s0)return;
-var aid=tx.org_account_id;
-var inc=num(tx.income)||0, out=num(tx.outcome)||0;
-if(VSIP[aid]){vSt+=inc-out;}
-if(TT[aid])  {tSt+=inc-out;}
-});
- 
-var te=pjOut+zp+km+bk+ins+lz+ar+buh+ntax+po+pct+bg;
-return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,tS:vSt+tSt,tE:(vEnd||0)+(tEnd||0),
-pr:pr,pjIn:pjIn,refund:refund,poIn:poIn,pjOut:pjOut,zp:zp,km:km,bk:bk,ins:ins,lz:lz,ar:ar,buh:buh,ntax:ntax,po:po,pct:pct,bg:bg,te:te,trIn:trIn,trOut:trOut,skIn:skIn,skOut:skOut,
-piP:piP,poP:poP,poDet:poDet,cnt:txMonth.length,d0:rng.d0,d1:rng.d1,label:rng.label,ymd:rng.ymd};
-}
- 
-function TR(l,v,cls,ind){var n=fmt(v),c="";if(cls==="g"&&v>0)c="color:#16a34a";if(cls==="r"&&v<0)c="color:#dc2626";if(cls==="m")c="color:#9ca3af";var s1="padding:4px 6px"+(ind?";padding-left:14px":"");var s2="padding:4px 6px;text-align:right;white-space:nowrap"+(c?";"+c:"");return"<tr><td style='"+s1+"'>"+l+"</td><td style='"+s2+"'>"+n+"</td></tr>";}
-function SEP(l,v,cls){var n=fmt(v),c="";if(cls==="g"&&v>0)c="color:#16a34a";if(cls==="r"&&v<0)c="color:#dc2626";var s="padding:4px 6px;font-weight:600;border-top:1px solid #e5e7eb";return"<tr><td style='"+s+"'>"+l+"</td><td style='"+s+";text-align:right;white-space:nowrap"+(c?";"+c:"")+"'>"+n+"</td></tr>";}
-function SEC(l){return"<tr><td colspan='2' style='padding:7px 6px 2px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-top:1px solid #e5e7eb'>"+l+"</td></tr>";}
- 
-function render(r,live){
-var rows=[],tot=0;
-rows.push(TR("Остаток "+r.d0+" · ВСИП",r.vSt,"",""));
-rows.push(TR("Остаток "+r.d0+" · ТТ",r.tSt,r.tSt<0?"r":"",""));
-rows.push(SEP("ИТОГО на "+r.d0,r.tS,""));
-rows.push(TR("Остаток "+r.d1+" · ВСИП",r.vEnd,"",""));
-rows.push(TR("Остаток "+r.d1+" · ТТ",r.tEnd,r.tEnd<0?"r":"",""));
-rows.push(SEP("ИТОГО на "+r.d1,r.tE,r.tE>=0?"g":"r"));
-rows.push(SEC("Поступления"));
-var hasPi=Object.keys(r.piP).length>0;
-if(hasPi){PO.forEach(function(p){var v=r.piP[p];if(v){rows.push(TR(PN[p],v,"g",1));tot+=v;}});}
-else if(r.pjIn){rows.push(TR("Поступления по проектам",r.pjIn,"g",1));tot+=r.pjIn;}
-if(r.pr){rows.push(TR("Процентные доходы",r.pr,"g",1));tot+=r.pr;}
-if(r.refund){rows.push(TR("Возвраты",r.refund,"g",1));tot+=r.refund;}
-if(r.poIn){rows.push(TR("Прочие поступления",r.poIn,"g",1));tot+=r.poIn;}
-rows.push(SEP("Итого поступлений",tot,"g"));
-rows.push(SEC("Расходы по проектам"));
-var hasPo=Object.keys(r.poP).length>0;
-if(hasPo){PO.forEach(function(p){var v=r.poP[p];if(v)rows.push(TR(PN[p],v,"",1));});}
-rows.push(SEP("Итого проекты",r.pjOut,""));
-rows.push(SEC("Офисные расходы"));
-if(r.zp)rows.push(TR("Зарплата",r.zp,"",1));
-if(r.km)rows.push(TR("Командировочные",r.km,"",1));
-if(r.ins)rows.push(TR("Страхование",r.ins,"",1));
-if(r.bk)rows.push(TR("Банковские комиссии",r.bk,"",1));
-if(r.lz)rows.push(TR("Лизинг",r.lz,"",1));
-if(r.ar)rows.push(TR("Аренда",r.ar,"",1));
-if(r.buh)rows.push(TR("Бухгалтерия",r.buh,"",1));
-if(r.ntax)rows.push(TR("Налоги и взносы",r.ntax,"",1));
-if(r.pct)rows.push(TR("Проценты к уплате",r.pct,"",1));
-if(r.bg)rows.push(TR("Банковские гарантии",r.bg,"",1));
-if(r.po)rows.push(TR("Прочие офисные",r.po,"",1));
-var offTotal=r.zp+r.km+r.bk+r.ins+r.lz+r.ar+r.buh+r.ntax+r.po+r.pct+r.bg;
-rows.push(SEP("Итого офисные",offTotal,""));
-var trNetto=r.trIn-r.trOut;
-var ctrl=r.tS+tot+r.skIn-(r.te+r.skOut-trNetto)-r.tE,cOk=Math.abs(ctrl)<1;
-rows.push(SEC("Переводы между счетами"));
-rows.push(TR("Поступления",r.trIn,r.trIn>0?"g":"m",1));
-rows.push(TR("Списания",r.trOut,r.trOut>0?"":"m",1));
-rows.push(SEP("Итого переводы нетто",trNetto,trNetto>0?"g":trNetto<0?"r":""));
-if(r.skIn||r.skOut){
-rows.push(SEC("Финансирование (займы)"));
-if(r.skIn)rows.push(TR("Получение займов",r.skIn,"g",1));
-if(r.skOut)rows.push(TR("Погашение займов",r.skOut,"",1));
-rows.push(SEP("Нетто займы",r.skIn-r.skOut,r.skIn-r.skOut>0?"g":r.skIn-r.skOut<0?"r":""));
-}
-rows.push(SEP("ВСЕГО РАСХОДОВ",r.te+r.skOut-trNetto,""));
-rows.push(SEP(cOk?"Контрольная сумма":"Контрольная сумма ⚠",ctrl,cOk?"g":"r"));
-var st=live?'<span style="color:#16a34a">● live · '+r.cnt+' тр.</span>':'<span style="color:#9ca3af">данные на '+r.d1+'</span>';
-return'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;">'
-+'<div><div style="font-size:13px;font-weight:600">ДДС — '+r.label+'</div>'
-+'<div style="font-size:10px;color:#9ca3af;margin-top:1px">'+r.d0+' — '+r.d1+'</div></div>'
-+'<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">'
-+'<span id="st" style="font-size:10px">'+st+'</span>'
-+'<button id="btn" style="background:none;border:1px solid #d1d5db;color:#6b7280;font-size:10px;padding:1px 6px;border-radius:3px;cursor:pointer">↻</button>'
-+'<button id="rst" style="background:none;border:1px solid #d1d5db;color:#9ca3af;font-size:10px;padding:1px 5px;border-radius:3px;cursor:pointer">⟳₀</button>'
-+'</div></div>'
-+'<table>'+rows.join('')+'</table>'
-+'<div style="margin-top:5px;font-size:10px;color:#9ca3af">обновлено: '+new Date().toLocaleTimeString("ru-RU")+'</div>';
-}
- 
-function renderPoDet(poDet){
-if(!poDet||!poDet.length)return;
-var d=document.createElement("details"),s=document.createElement("summary");
-var tot=poDet.reduce(function(a,p){return a+p.out;},0);
-s.textContent="Прочие расходы ("+poDet.length+" тр. на "+fmtI(tot)+" р.)";
-d.appendChild(s);
-var t=document.createElement("table");t.style.cssText="width:100%;border-collapse:collapse;margin-top:4px";
-poDet.sort(function(a,b){return b.out-a.out;}).forEach(function(p){
-var tr=document.createElement("tr");
-tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.date+"</td><td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat+"</td><td style='padding:2px 4px;font-size:10px;text-align:right'>"+fmtI(p.out)+"</td>";
-t.appendChild(tr);
-});
-d.appendChild(t);document.getElementById("root").appendChild(d);
-}
- 
-function load(reset){
-var el=document.getElementById("root"),rng=getRange();
-if(reset)clrF(rng.ymd);
-var s=document.getElementById("st");
-if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
- 
-Promise.all([
-loadAll("transaction"),
-loadAll("categories")
-]).then(function(res){
-var txAll=res[0],cats=res[1];
-var rng=getRange();
-var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
-console.log("[DDS] tx:",txAll.length,"period:",txM.length,"cats:",cats.length);
-if(txM.length){
-var r=calc(txM,txAll,cats,rng);
-el.innerHTML=render(r,true);
-renderPoDet(r.poDet);
-}else{
-el.innerHTML="<div style='padding:12px;font-size:11px;color:#666'>"
-+"Нет данных за "+rng.label+"<br>"
-+"tx всего: "+txAll.length+", за период: "+txM.length+"<br>"
-+"диапазон: "+rng.s0+" — "+rng.s1+"<br>"
-+"domain: "+DOMAIN+"<br>"
-+"token: "+(TOKEN?TOKEN.slice(0,20)+"...":"нет")
-+"</div>";
-}
-var b=document.getElementById("btn");if(b)b.onclick=function(){load(false);};
-var rb=document.getElementById("rst");if(rb)rb.onclick=function(){load(true);};
-}).catch(function(e){
-el.innerHTML="<div style='padding:12px;color:#dc2626'>Ошибка: "+e+"</div>";
-console.error("[DDS]",e);
-});
-}
- 
-(function(){
-var now=new Date(),y=now.getFullYear(),m=now.getMonth();
-var end=Math.min(now.getDate(),new Date(y,m+1,0).getDate());
-var pad=function(n){return n<10?"0"+n:""+n;};
-var d0el=document.getElementById("d0"),d1el=document.getElementById("d1");
-if(d0el){d0el.value=y+"-"+pad(m+1)+"-01";d0el.addEventListener("change",function(){load(false);});}
-if(d1el){d1el.value=y+"-"+pad(m+1)+"-"+pad(end);d1el.addEventListener("change",function(){load(false);});}
+(function () {
+  'use strict';
+
+  // Банковские счета для расчёта остатков (org_account_id)
+  // ВСИП: 2-Альфа, 4-Совком, 5-РХСБ, 6-Сбер, 7-ВТБ, 8-Депозиты
+  // ТТ:   18-Альфа ТТ (ВСИП)
+  var VSIP_ACC_IDS = {2:1, 4:1, 5:1, 6:1, 7:1, 8:1};
+  var TT_ACC_IDS   = {18:1};
+
+  // Справочники проектов
+  var PID_MAP = {
+    1:'Кемерово',
+    6:'Десногорск',
+    12:'Киров',
+    23:'Сыктывкар',
+    13:'Барнаул',
+    9:'Рузаевка',
+    3:'Ю-Сахалинск',
+    25:'Ю-Сахалинск',
+    7:'Иволгинск',
+    10:'Большое Болдино',
+    2:'Центр. договор',
+    18:'Центр. договор',
+    19:'Центр. договор',
+    29:'Центр. договор',
+    30:'Центр. договор',
+    31:'Центр. договор',
+    32:'Центр. договор',
+    33:'Голутвинский',
+    4:'Прочие',
+    22:'Прочие',
+    20:'Прочие',
+    17:'Прочие',
+    21:'Прочие',
+    24:'ОХР (ВСИП+ТТ)',
+    26:'ОХР (ВСИП+ТТ)'
+  };
+
+  var PROJECTS = [
+    'Кемерово',
+    'Десногорск',
+    'Киров',
+    'Сыктывкар',
+    'Барнаул',
+    'Рузаевка',
+    'Ю-Сахалинск',
+    'Иволгинск',
+    'Большое Болдино',
+    'Голутвинский',
+    'Центр. договор',
+    'Прочие',
+    'ОХР (ВСИП+ТТ)'
+  ];
+
+  // Проекты ОХР для финансовой деятельности
+  var OXR_PIDS = {24:1, 26:1};
+
+  // Категории, исключаемые из секций ДОХОДЫ/РАСХОДЫ
+  var SKIP = {
+    'Перевод между счетами (поступление)': 1,
+    'Перевод между счетами (списание)': 1,
+    'Получение кредита': 1,
+    'Выплата кредита': 1,
+    'Проценты к уплате': 1
+  };
+
+  var INC_TYPES = {
+    'Оказание услуг': 1,
+    'Возврат ДС. за заказы': 1,
+    'Проценты к получению': 1
+  };
+
+  function isIncome(t) { return !!INC_TYPES[t]; }
+
+  // catId — числовой category_id транзакции (для точной классификации без зависимости от имени)
+  function isExpense(t, proj, catId) {
+    if (SKIP[t]) return false;
+    var l = t.toLowerCase();
+    if (proj === 'ОХР (ВСИП+ТТ)') return true;
+    // cat=1006 RETURNS_TO_CUSTOMERS — возврат всегда расход своего проекта
+    if (catId === 1006) return true;
+    return (
+      l.indexOf('материал') === 0 ||
+      l.indexOf('смр') === 0 ||
+      (l.indexOf('банков') >= 0 && l.indexOf('гарант') >= 0) ||
+      l.indexOf('проектирован') >= 0 ||
+      l.indexOf('изыскан') >= 0 ||
+      l.indexOf('оборудован') >= 0 ||
+      l.indexOf('мобилизац') >= 0 ||
+      t === 'Командировки' ||
+      t === 'Составление исполнительной документации' ||
+      t === 'Услуги по сертификации' ||
+      t === 'Тесты и испытания'
+    );
+  }
+
+  var MS = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+  var PM_MONTHS = ['Июл','Авг','Сен','Окт','Ноя','Дек'];
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  // Форматирование
+  function fmtK(v, bold, neg_red) {
+    if (!v) return '<span style="color:#ccc">—</span>';
+    var absV = Math.abs(v) / 1000;
+    var parts = absV.toFixed(1).split('.');
+    parts[0] = parts[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ');
+    var s = parts.join('.');
+    var isNeg = v < 0;
+    var wrapped = isNeg ? '(' + s + ')' : s;
+    if (neg_red && isNeg) {
+      return bold
+        ? '<strong style="color:#dc2626">' + wrapped + '</strong>'
+        : '<span style="color:#dc2626">' + wrapped + '</span>';
+    }
+    return bold ? '<strong>' + wrapped + '</strong>' : wrapped;
+  }
+
+  function fmtBal(v, bold) {
+    if (!v && v !== 0) return '<span style="color:#ccc">—</span>';
+    var absV = Math.abs(v) / 1000;
+    var parts = absV.toFixed(1).split('.');
+    parts[0] = parts[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ');
+    var s = parts.join('.');
+    var isNeg = v < 0;
+    var wrapped = isNeg ? '(' + s + ')' : s;
+    var col = isNeg ? '#dc2626' : '#059669';
+    return bold
+      ? '<strong style="color:' + col + '">' + wrapped + '</strong>'
+      : '<span style="color:' + col + '">' + wrapped + '</span>';
+  }
+
+  // API через серверный прокси /api/data
+  function fetchAll(entity) {
+    var all = [], page = 1;
+    function next() {
+      var p = new URLSearchParams();
+      p.append('entity', entity);
+      p.append('limit', '100');
+      p.append('page', String(page));
+      return fetch('/api/data?' + p.toString())
+        .then(function(r) {
+          if (!r.ok) throw new Error(entity + ' HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function(d) {
+          if (d.error) throw new Error(entity + ': ' + JSON.stringify(d.error));
+          var items = (d.response && d.response.items) || [];
+          all = all.concat(items);
+          var total = (d.response && d.response.total) || 0;
+          if (all.length >= total || items.length < 100) return all;
+          page++;
+          return next();
+        });
+    }
+    return next();
+  }
+
+  function fetchCategories() {
+    return fetchAll('categories').then(function(items) {
+      var map = {};
+      items.forEach(function(c) { map[c.id] = c.name || ''; });
+      return map;
+    });
+  }
+
+  function fetchPlanMoney(curYear) {
+    return fetchAll('plan_money').then(function(items) {
+      return items.filter(function(i) {
+        if (!i.plan_paid_date) return false;
+        var iy = parseInt(i.plan_paid_date.substring(0, 4));
+        return iy >= curYear && i.org_account_id === 36;
+      });
+    });
+  }
+
+  // Расчёт факта + остатки + финансовая деятельность
+  function calcFact(txns, catMap, curYear, curMonth) {
+    var now   = new Date();
+    var today = now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
+    var jan1  = curYear + '-01-01';
+
+    var acc = {};
+    PROJECTS.forEach(function(p) {
+      acc[p] = { i25:0, e25:0, i26:0, e26:0, iCur:0, eCur:0 };
+    });
+
+    // Финансовая деятельность (только проекты 24 и 26)
+    var fin = {
+      skIn:  { f25:0, f26:0, fCur:0 },   // Получение займов
+      skOut: { f25:0, f26:0, fCur:0 },   // Выдача займов
+      int:   { f25:0, f26:0, fCur:0 },   // Процентные расходы
+      trIn:  { f25:0, f26:0, fCur:0 },   // Переводы поступление
+      trOut: { f25:0, f26:0, fCur:0 }    // Переводы списание
+    };
+
+    // Остатки по банковским счетам
+    var vSt = 0, tSt = 0, vEnd = 0, tEnd = 0;
+
+    txns.forEach(function(tx) {
+      var dt     = tx.date || '';
+      var incAmt = parseFloat(tx.income)  || 0;
+      var expAmt = parseFloat(tx.outcome) || 0;
+
+      // Остатки по всем транзакциям банковских счетов
+      var aid = tx.org_account_id;
+      if (VSIP_ACC_IDS[aid]) {
+        if (dt < jan1)   vSt  += incAmt - expAmt;
+        if (dt <= today) vEnd += incAmt - expAmt;
+      }
+      if (TT_ACC_IDS[aid]) {
+        if (dt < jan1)   tSt  += incAmt - expAmt;
+        if (dt <= today) tEnd += incAmt - expAmt;
+      }
+
+      // Только текущий и прошлый год для факта
+      var yr = parseInt(dt.slice(0, 4)) || 0;
+      var mo = parseInt(dt.slice(5, 7)) || 0;
+      if (yr !== curYear && yr !== curYear - 1) return;
+
+      var typeName = catMap[tx.category_id] || '';
+      var proj     = PID_MAP[tx.project_id];
+      if (!proj) return;
+
+      var isPrev = (yr === curYear - 1);
+      var isCur  = (yr === curYear && mo === curMonth);
+      var fKey   = isPrev ? 'f25' : 'f26';
+
+      // Финансовая деятельность — только проекты 24 и 26
+      if (OXR_PIDS[tx.project_id]) {
+        if (typeName === 'Получение кредита' && incAmt > 0) {
+          fin.skIn[fKey]  += incAmt; if (isCur) fin.skIn.fCur  += incAmt;
+        }
+        if (typeName === 'Выплата кредита' && expAmt > 0) {
+          fin.skOut[fKey] += expAmt; if (isCur) fin.skOut.fCur += expAmt;
+        }
+        if (typeName === 'Проценты к уплате' && expAmt > 0) {
+          fin.int[fKey]   += expAmt; if (isCur) fin.int.fCur   += expAmt;
+        }
+        if (typeName === 'Перевод между счетами (поступление)' && incAmt > 0) {
+          fin.trIn[fKey]  += incAmt; if (isCur) fin.trIn.fCur  += incAmt;
+        }
+        if (typeName === 'Перевод между счетами (списание)' && expAmt > 0) {
+          fin.trOut[fKey] += expAmt; if (isCur) fin.trOut.fCur += expAmt;
+        }
+      }
+
+      // Доходы и расходы по проектам
+      var a = acc[proj];
+      if (incAmt > 0 && isIncome(typeName)) {
+        if (isPrev) { a.i25 += incAmt; }
+        else { a.i26 += incAmt; if (isCur) a.iCur += incAmt; }
+      }
+      if (expAmt > 0 && isExpense(typeName, proj, tx.category_id)) {
+        if (isPrev) { a.e25 += expAmt; }
+        else { a.e26 += expAmt; if (isCur) a.eCur += expAmt; }
+      }
+    });
+
+    return { acc:acc, fin:fin, vSt:vSt, tSt:tSt, vEnd:vEnd, tEnd:tEnd };
+  }
+
+  // Расчёт плана
+  function calcPlan(planItems, curYear, curMonth) {
+    var pm = {};
+    PROJECTS.forEach(function(p) {
+      pm[p] = { bi_plan:0, be_plan:0, hI:0, hE:0,
+                plan_i:[0,0,0,0,0,0], plan_e:[0,0,0,0,0,0] };
+    });
+    planItems.forEach(function(item) {
+      var proj = PID_MAP[item.project_id];
+      if (!proj) return;
+      var d   = pm[proj];
+      var iy  = parseInt(item.plan_paid_date.substring(0, 4));
+      var im  = parseInt(item.plan_paid_date.substring(5, 7));
+      var val = item.total || 0;
+      var isI = (item.type === 30), isE = (item.type === 40);
+      if (iy > curYear || (iy === curYear && im >= curMonth)) {
+        if (isI) d.bi_plan += val;
+        if (isE) d.be_plan += val;
+      }
+      if (iy === curYear && im === curMonth) {
+        if (isI) d.hI += val;
+        if (isE) d.hE += val;
+      }
+      if (iy === curYear && im >= 7 && im <= 12) {
+        var idx = im - 7;
+        if (isI) d.plan_i[idx] += val;
+        if (isE) d.plan_e[idx] += val;
+      }
+    });
+    return pm;
+  }
+
+  // Построение таблицы
+  function buildTable(result, pm, curYear, curMonth) {
+    var acc  = result.acc;
+    var fin  = result.fin;
+    var vSt  = result.vSt,  tSt  = result.tSt;
+    var vEnd = result.vEnd, tEnd = result.tEnd;
+    var tSt0 = vSt + tSt, tEnd0 = vEnd + tEnd;
+
+    var now       = new Date();
+    var todayStr  = pad2(now.getDate()) + '.' + pad2(now.getMonth()+1) + '.' + now.getFullYear();
+    var jan1Str   = '01.01.' + curYear;
+    var curMon    = MS[curMonth - 1];
+    var prevYear  = curYear - 1;
+
+    var SEP = ';border-left:2px solid #3d5c7a';
+    var BT  = ';border-top:2px solid #c5cfe8';
+    var BT2 = ';border-top:2px solid #4a6a8a';
+    var BL2 = ';border-left:2px solid #4a6a8a';
+
+    function TH(v, s)  { return '<th style="padding:5px 6px;text-align:right;border-bottom:2px solid #3d5c7a;font-size:10px;font-weight:600;white-space:nowrap' + (s||'') + '">' + v + '</th>'; }
+    function THl(v, s) { return '<th style="padding:5px 6px;text-align:left;border-bottom:2px solid #3d5c7a;font-size:10px;font-weight:600' + (s||'') + '">' + v + '</th>'; }
+    function TD(v, s)  { return '<td style="padding:2px 6px;text-align:right;border-bottom:1px solid #f0f0f0;white-space:nowrap' + (s||'') + '">' + v + '</td>'; }
+    function TDl(v, s) { return '<td style="padding:2px 6px;border-bottom:1px solid #f0f0f0;white-space:nowrap' + (s||'') + '">' + v + '</td>'; }
+    function dash()    { return '<span style="color:#ccc">—</span>'; }
+
+    // 6 пустых ячеек для колонок плана (с SEP на первой)
+    function planEmpty() {
+      return TD(dash(), SEP) + TD(dash()) + TD(dash()) + TD(dash()) + TD(dash()) + TD(dash());
+    }
+
+    function getBudget(p, type) {
+      var a = acc[p], d = pm[p];
+      return type === 'inc'
+        ? a.i25 + (a.i26 - a.iCur) + d.bi_plan
+        : a.e25 + (a.e26 - a.eCur) + d.be_plan;
+    }
+
+    function totals(type) {
+      var t = { b:0, f25:0, f26:0, fCur:0, fH:0, plan:[0,0,0,0,0,0] };
+      PROJECTS.forEach(function(p) {
+        var d = pm[p], a = acc[p];
+        t.b    += getBudget(p, type);
+        t.f25  += (type === 'inc') ? a.i25  : a.e25;
+        t.f26  += (type === 'inc') ? a.i26  : a.e26;
+        t.fCur += (type === 'inc') ? a.iCur : a.eCur;
+        t.fH   += (type === 'inc') ? d.hI   : d.hE;
+        for (var i = 0; i < 6; i++)
+          t.plan[i] += (type === 'inc') ? d.plan_i[i] : d.plan_e[i];
+      });
+      t.fact = t.f25 + t.f26;
+      t.ost  = t.b - t.fact;
+      return t;
+    }
+
+    function pRow(p, type) {
+      var d = pm[p], a = acc[p];
+      var b    = getBudget(p, type);
+      var f25  = (type === 'inc') ? a.i25  : a.e25;
+      var f26  = (type === 'inc') ? a.i26  : a.e26;
+      var fCur = (type === 'inc') ? a.iCur : a.eCur;
+      var h    = (type === 'inc') ? d.hI   : d.hE;
+      var plan = (type === 'inc') ? d.plan_i : d.plan_e;
+      var fact = f25 + f26, ost = b - fact;
+      if (!b && !fact && plan.every(function(x){ return !x; })) return '';
+      return '<tr>'
+        + TDl(p)
+        + TD(fmtK(b), ';color:#9ca3af')
+        + TD(fmtK(f25), SEP) + TD(fmtK(f26))
+        + TD(fmtK(fact, true))
+        + TD(fmtK(ost, false, true), ost < 0 ? ';color:#dc2626' : '')
+        + TD(fmtK(h), SEP) + TD(fmtK(fCur))
+        + plan.map(function(v, i) { return TD(fmtK(v), i === 0 ? SEP : ''); }).join('')
+        + '</tr>';
+    }
+
+    function totRow(label, t, bg) {
+      bg = bg || '#eef2ff';
+      return '<tr style="background:' + bg + '">'
+        + TDl('<strong>' + label + '</strong>', BT)
+        + TD(fmtK(t.b, true), ';color:#9ca3af' + BT)
+        + TD(fmtK(t.f25, true), SEP + BT) + TD(fmtK(t.f26, true), BT)
+        + TD(fmtK(t.fact, true), BT)
+        + TD(fmtK(t.ost, true, true), (t.ost < 0 ? ';color:#dc2626' : '') + BT)
+        + TD(fmtK(t.fH, true), SEP + BT) + TD(fmtK(t.fCur, true), BT)
+        + t.plan.map(function(v, i) { return TD(fmtK(v, true), (i === 0 ? SEP : '') + BT); }).join('')
+        + '</tr>';
+    }
+
+    // Строка финансовой деятельности: только факт-колонки, план пустой
+    function finRow(label, item) {
+      var f25 = item.f25, f26 = item.f26, tot = f25 + f26, fCur = item.fCur;
+      if (!tot && !fCur) return '';
+      return '<tr>'
+        + TDl(label, ';padding-left:14px')
+        + TD(dash(), ';color:#9ca3af')
+        + TD(fmtK(f25), SEP) + TD(fmtK(f26))
+        + TD(fmtK(tot, true))
+        + TD(dash())
+        + TD(dash(), SEP) + TD(fmtK(fCur))
+        + planEmpty()
+        + '</tr>';
+    }
+
+    // Итого нетто финансовой деятельности
+    var finNetF25  = fin.skIn.f25  + fin.trIn.f25  - fin.skOut.f25  - fin.int.f25  - fin.trOut.f25;
+    var finNetF26  = fin.skIn.f26  + fin.trIn.f26  - fin.skOut.f26  - fin.int.f26  - fin.trOut.f26;
+    var finNetCur  = fin.skIn.fCur + fin.trIn.fCur - fin.skOut.fCur - fin.int.fCur - fin.trOut.fCur;
+    var finNetTot  = finNetF25 + finNetF26;
+
+    var ti = totals('inc'), te = totals('exp');
+
+    // Контрольная сумма:
+    // Остаток_нач + Доходы_26 + ФинПриход_26 - Расходы_26 - ФинРасход_26 = Остаток_кон
+    var finIn26  = fin.skIn.f26  + fin.trIn.f26;
+    var finOut26 = fin.skOut.f26 + fin.int.f26 + fin.trOut.f26;
+    var ctrl = tSt0 + (ti.f26 + finIn26) - (te.f26 + finOut26) - tEnd0;
+    var cOk  = Math.abs(ctrl) < 1000;
+
+    var yearLabel = curYear + '<br><span style="font-weight:400;font-size:9px">янв–' + curMon.toLowerCase() + '</span>';
+
+    var sectionHdr = function(text, bg, color, border) {
+      return '<tr style="background:' + bg + '"><td colspan="14" style="padding:4px 8px;font-weight:700;font-size:11.5px;color:' + color + ';border-bottom:1px solid ' + border + '">' + text + '</td></tr>';
+    };
+
+    // Строка начального остатка: метка в кол.3, значение в кол.4
+    function balOpenRow(entity, v, total) {
+      var lbl = 'Остаток на ' + jan1Str + ' · ' + entity;
+      var bg  = total ? ';background:#d1e8ff' : '';
+      return '<tr style="font-size:10.5px' + bg + '">'
+        + TD(dash())
+        + TD(dash(), ';color:#9ca3af')
+        + TDl(total ? '<strong>' + lbl + '</strong>' : lbl, SEP + ';color:#374151')
+        + TD(fmtBal(v, total), '')
+        + TD(dash()) + TD(dash())
+        + TD(dash(), SEP) + TD(dash())
+        + planEmpty()
+        + '</tr>';
+    }
+
+    // Строка закрывающего остатка: метка в кол.4, значение в кол.5
+    function balCloseRow(entity, v, total) {
+      var lbl = 'Остаток на ' + todayStr + ' · ' + entity;
+      var bg  = total ? ';background:#d1e8ff' : '';
+      return '<tr style="font-size:10.5px' + bg + '">'
+        + TD(dash())
+        + TD(dash(), ';color:#9ca3af')
+        + TDl(total ? '<strong>' + lbl + '</strong>' : lbl, SEP + ';color:#374151')
+        + TD(fmtBal(v, total), '')
+        + TD(dash()) + TD(dash())
+        + TD(dash(), SEP) + TD(dash())
+        + planEmpty()
+        + '</tr>';
+    }
+
+    // Переводы между счетами — одна строка нетто
+    var trNet = {
+      f25:  fin.trIn.f25  - fin.trOut.f25,
+      f26:  fin.trIn.f26  - fin.trOut.f26,
+      fCur: fin.trIn.fCur - fin.trOut.fCur
+    };
+
+    var ctrlStr = (function() {
+      var absV = Math.abs(ctrl) / 1000;
+      var s = absV.toFixed(1).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' ');
+      return ctrl < 0 ? '(' + s + ')' : s;
+    })();
+
+    return '<table style="width:100%;border-collapse:collapse;font-size:11px">'
+      + '<thead>'
+      + '<tr style="background:#1e3a5f;color:#a8c4e0;font-size:9px">'
+      + '<td style="padding:2px 6px;min-width:120px"></td><td></td>'
+      + '<td colspan="4" style="padding:2px 6px;text-align:center;border-left:2px solid #3d5c7a">ФАКТ</td>'
+      + '<td colspan="2" style="padding:2px 6px;text-align:center;border-left:2px solid #3d5c7a">Тек. месяц (' + curMon + ')</td>'
+      + '<td colspan="6" style="padding:2px 6px;text-align:center;border-left:2px solid #3d5c7a">&#9654; План</td>'
+      + '</tr>'
+      + '<tr style="background:#1e3a5f;color:#fff">'
+      + THl('Проект', ';min-width:120px;max-width:140px')
+      + TH('Бюджет', ';color:#a8c4e0')
+      + TH(String(prevYear), SEP + ';color:#a8c4e0')
+      + TH(yearLabel)
+      + TH('Итого') + TH('Остаток')
+      + TH('Бюджет', SEP) + TH('Факт')
+      + PM_MONTHS.map(function(m, i) { return TH(m, i === 0 ? SEP : ''); }).join('')
+      + '</tr>'
+      + '</thead>'
+      + '<tbody>'
+
+      // Начальный остаток на 01.01
+      + balOpenRow('ВСИП', vSt, false)
+      + balOpenRow('ТТ', tSt, false)
+      + balOpenRow('ИТОГО', tSt0, true)
+
+      // ДОХОДЫ
+      + sectionHdr('ДОХОДЫ', '#dce7f5', '#1e3a5f', '#c5cfe8')
+      + PROJECTS.map(function(p) { return pRow(p, 'inc'); }).join('')
+      + totRow('ИТОГО ДОХОДЫ', ti)
+
+      // РАСХОДЫ
+      + sectionHdr('РАСХОДЫ', '#fae8e8', '#7f1d1d', '#fca5a5')
+      + PROJECTS.map(function(p) { return pRow(p, 'exp'); }).join('')
+      + totRow('ИТОГО РАСХОДЫ', te, '#fef2f2')
+
+      // ФИНАНСОВАЯ ДЕЯТЕЛЬНОСТЬ
+      + sectionHdr('ФИНАНСОВАЯ ДЕЯТЕЛЬНОСТЬ', '#f0f4ff', '#3730a3', '#c7d2fe')
+      + finRow('Выдача займов', fin.skOut)
+      + finRow('Получение займов', fin.skIn)
+      + finRow('Процентные расходы', fin.int)
+      + finRow('Переводы между счетами', trNet)
+      + '<tr style="background:#e0e7ff">'
+      + TDl('<strong>ИТОГО финансовая деятельность</strong>', BT)
+      + TD(dash(), ';color:#9ca3af' + BT)
+      + TD(fmtK(finNetF25, true), SEP + BT) + TD(fmtK(finNetF26, true), BT)
+      + TD(fmtK(finNetTot, true), BT)
+      + TD(dash(), BT)
+      + TD(dash(), SEP + BT) + TD(fmtK(finNetCur, true), BT)
+      + TD(dash(), SEP + BT) + TD(dash(), BT) + TD(dash(), BT)
+      + TD(dash(), BT) + TD(dash(), BT) + TD(dash(), BT)
+      + '</tr>'
+
+      // Закрывающий остаток на текущую дату
+      + balCloseRow('ВСИП', vEnd, false)
+      + balCloseRow('ТТ', tEnd, false)
+      + balCloseRow('ИТОГО', tEnd0, true)
+
+      // КОНТРОЛЬНАЯ СУММА
+      + '<tr style="background:#1e3a5f">'
+      + TDl('<strong style="color:#fff">' + (cOk ? '&#10003; Контрольная сумма' : '&#9888; Контрольная сумма') + '</strong>', BT2)
+      + TD(dash(), BT2)
+      + TD(dash(), BL2 + BT2) + TD(dash(), BT2)
+      + TD('<strong style="color:' + (cOk ? '#6ee7b7' : '#fca5a5') + '">' + ctrlStr + '</strong>', BT2)
+      + TD(dash(), BT2)
+      + TD(dash(), BL2 + BT2) + TD(dash(), BT2)
+      + TD(dash(), BL2 + BT2) + TD(dash(), BT2) + TD(dash(), BT2)
+      + TD(dash(), BT2) + TD(dash(), BT2) + TD(dash(), BT2)
+      + '</tr>'
+
+      + '</tbody></table>';
+  }
+
+  // Загрузка
+  var loading = false;
+
+  function load() {
+    if (loading) return;
+    loading = true;
+    var statusEl  = document.getElementById('status');
+    var contentEl = document.getElementById('content');
+    var now = new Date(), yr = now.getFullYear(), mo = now.getMonth() + 1;
+
+    statusEl.textContent = '&#9679; загрузка...';
+    statusEl.style.color = '#d97706';
+    contentEl.innerHTML  = '<div style="padding:20px;text-align:center;color:#6b7280">&#8987; Загружаем данные...</div>';
+
+    var t0 = Date.now();
+    Promise.all([
+      fetchAll('transaction'),
+      fetchPlanMoney(yr),
+      fetchCategories()
+    ]).then(function(results) {
+      var txns      = results[0];
+      var planItems = results[1];
+      var catMap    = results[2];
+      var factResult = calcFact(txns, catMap, yr, mo);
+      var pm         = calcPlan(planItems, yr, mo);
+      contentEl.innerHTML = buildTable(factResult, pm, yr, mo);
+      var elapsed = ((Date.now() - t0) / 1000).toFixed(0);
+      statusEl.innerHTML = '&#9679; live · ' + now.toLocaleDateString('ru-RU') + ' · ' + txns.length + ' тр. · ' + elapsed + 'с';
+      statusEl.style.color = '#059669';
+      loading = false;
+    }).catch(function(err) {
+      contentEl.innerHTML = '<div style="padding:16px;color:#dc2626">&#10060; Ошибка: ' + err.message + '</div>';
+      statusEl.textContent = '&#9679; ошибка';
+      statusEl.style.color = '#dc2626';
+      loading = false;
+    });
+  }
+
+  document.getElementById('refresh-btn').addEventListener('click', function() {
+    loading = false;
+    load();
+  });
+
+  load();
 })();
- 
-load(false);
-setInterval(function(){load(false);},5*60*1000);
-console.log("[DDS] started | domain:",DOMAIN,"| token:",!!TOKEN);
 </script>
 </body>
-</html>`;
-}
+</html>
+`;
+
+module.exports = function handler(req, res) {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Frame-Options', 'ALLOWALL');
+  res.setHeader('Content-Security-Policy', "frame-ancestors *");
+  res.end(HTML);
+};
