@@ -42,7 +42,9 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
 
   // GET — прокси к Аспро (для виджета ДДС: loadAll делает GET ?entity=...&filter[...]=...)
+  // transaction_pls намеренно исключён: ДДС загружает PLS через /api/pls3144, а не через этот эндпоинт.
   if (req.method === 'GET') {
+    const GET_ALLOWED = ['plan_money', 'transaction', 'categories'];
     const apiKey = process.env.ASPRO_API_KEY;
     if (!apiKey) {
       res.statusCode = 500;
@@ -54,7 +56,7 @@ module.exports = async function handler(req, res) {
     const urlParams = new URLSearchParams(qs);
     const entity = urlParams.get('entity');
 
-    if (!entity || !ALLOWED.includes(entity)) {
+    if (!entity || !GET_ALLOWED.includes(entity)) {
       res.statusCode = 400;
       return res.end(JSON.stringify({ error: 'entity not allowed: ' + entity }));
     }
