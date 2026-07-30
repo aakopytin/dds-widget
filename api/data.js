@@ -34,46 +34,12 @@ function httpsGet(url) {
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
-
-  // GET — прокси к Аспро (для виджета ДДС: loadAll делает GET ?entity=...&filter[...]=...)
-  // transaction_pls намеренно исключён: ДДС загружает PLS через /api/pls3144, а не через этот эндпоинт.
-  if (req.method === 'GET') {
-    const GET_ALLOWED = ['plan_money', 'transaction', 'categories'];
-    const apiKey = process.env.ASPRO_API_KEY;
-    if (!apiKey) {
-      res.statusCode = 500;
-      return res.end(JSON.stringify({ error: 'ASPRO_API_KEY not set' }));
-    }
-    const domain = process.env.ASPRO_DOMAIN || '2cec.aspro.cloud';
-    const rawUrl = req.url || '';
-    const qs = rawUrl.includes('?') ? rawUrl.split('?')[1] : '';
-    const urlParams = new URLSearchParams(qs);
-    const entity = urlParams.get('entity');
-
-    if (!entity || !GET_ALLOWED.includes(entity)) {
-      res.statusCode = 400;
-      return res.end(JSON.stringify({ error: 'entity not allowed: ' + entity }));
-    }
-
-    // Передаём все параметры кроме entity, добавляем api_key
-    urlParams.delete('entity');
-    urlParams.set('api_key', apiKey);
-    const url = 'https://' + domain + '/api/v1/module/fin/' + entity + '/list?' + urlParams.toString();
-
-    try {
-      const data = await httpsGet(url);
-      return res.end(JSON.stringify(data));
-    } catch(err) {
-      res.statusCode = 502;
-      return res.end(JSON.stringify({ error: err.message }));
-    }
-  }
 
   if (req.method !== 'POST') {
     res.statusCode = 405;
@@ -86,7 +52,6 @@ module.exports = async function handler(req, res) {
     return res.end(JSON.stringify({ error: 'ASPRO_API_KEY not set' }));
   }
 
-  // Read body manually — req.body is not auto-parsed in plain Vercel functions
   const body = await readJsonBody(req);
   const domain = body.domain;
   const entity = body.entity;
@@ -107,7 +72,6 @@ module.exports = async function handler(req, res) {
 
   try {
     const d0 = await httpsGet(base + '&page=1');
-    // If Aspro returns unexpected structure, expose it for debugging
     if (!d0.response) {
       res.statusCode = 502;
       return res.end(JSON.stringify({ error: 'unexpected_aspro_response', raw: d0 }));
