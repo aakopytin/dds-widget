@@ -4,7 +4,7 @@
 
 const https = require('https');
 
-const ALLOWED = ['plan_money', 'transaction', 'categories', 'transaction_pls'];
+const ALLOWED = ['plan_money', 'transaction', 'categories', 'transaction_pls', 'bank_account'];
 const PAGE_SIZE = 100;
 
 function readJsonBody(req) {
