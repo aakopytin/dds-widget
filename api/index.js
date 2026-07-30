@@ -194,7 +194,7 @@ function calc(txMonth,txAll,cats,plsData,rng){
       if(isT&&!intT){trIn_t+=inc;trOut_t+=out;}
       return;
     }
-    if(inc>0){
+    if(inc){
       if(cat==="pr"){if(isV)vPr+=inc;if(isT)tPr+=inc;}
       else if(cat==="pjIn"&&pOk){if(isV){vPjIn+=inc;piP_v[gp]=(piP_v[gp]||0)+inc;}if(isT){tPjIn+=inc;piP_t[gp]=(piP_t[gp]||0)+inc;}}
       else if(cat==="refund"){if(isV){vRefund+=inc;if(pOk||pOff)refPG_v[gp]=1;}if(isT){tRefund+=inc;if(pOk||pOff)refPG_t[gp]=1;}}
