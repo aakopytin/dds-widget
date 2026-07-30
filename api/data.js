@@ -1,56 +1,135 @@
+// Proxy to Aspro Cloud API — server-side pagination
+// Env vars: ASPRO_API_KEY
+// Domain is passed in request body (sent by client JS as JSON POST)
+
+const https = require('https');
+
+const ALLOWED = ['plan_money', 'transaction', 'categories', 'transaction_pls'];
+const PAGE_SIZE = 100;
+
+function readJsonBody(req) {
+  return new Promise(function(resolve) {
+    var d = '';
+    req.on('data', function(c) { d += c.toString(); });
+    req.on('end', function() {
+      try { resolve(JSON.parse(d)); }
+      catch(e) { resolve({}); }
+    });
+    req.on('error', function() { resolve({}); });
+  });
+}
+
+function httpsGet(url) {
+  return new Promise(function(resolve, reject) {
+    https.get(url, function(resp) {
+      let data = '';
+      resp.on('data', function(chunk) { data += chunk; });
+      resp.on('end', function() {
+        try { resolve(JSON.parse(data)); }
+        catch(e) { reject(new Error('JSON parse: ' + e.message)); }
+      });
+    }).on('error', reject);
+  });
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
-  const apiKey = process.env.ASPRO_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'ASPRO_API_KEY not set' });
+  if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
 
-  const { domain, entity } = req.body || {};
-  if (!domain || !entity) return res.status(400).json({ error: 'Missing params' });
+  // GET — прокси к Аспро (для виджета ДДС: loadAll делает GET ?entity=...&filter[...]=...)
+  if (req.method === 'GET') {
+    const apiKey = process.env.ASPRO_API_KEY;
+    if (!apiKey) {
+      res.statusCode = 500;
+      return res.end(JSON.stringify({ error: 'ASPRO_API_KEY not set' }));
+    }
+    const domain = process.env.ASPRO_DOMAIN || '2cec.aspro.cloud';
+    const rawUrl = req.url || '';
+    const qs = rawUrl.includes('?') ? rawUrl.split('?')[1] : '';
+    const urlParams = new URLSearchParams(qs);
+    const entity = urlParams.get('entity');
 
-  const ALLOWED = ['transaction', 'bank_account', 'categories', 'contractor', 'contractor'];
-  if (!ALLOWED.includes(entity)) return res.status(403).json({ error: 'Not allowed' });
-
-  const base = `https://${domain.replace(/^https?:\/\//i,"").replace(/\/+$/,"")}/api/v1/module/fin/${entity}/list`
-    + `?api_key=${encodeURIComponent(apiKey)}&count=50`;
-
-  try {
-    // Шаг 1: узнаём total
-    const r0 = await fetch(base + '&page=1');
-    if (!r0.ok) return res.status(r0.status).json({ error: `API ${r0.status}` });
-    const d0 = await r0.json();
-    const firstItems = d0?.response?.items || [];
-    const total = d0?.response?.total || 0;
-    const totalPages = Math.ceil(total / 50);
-
-    console.log(`[DDS] ${entity}: total=${total}, pages=${totalPages}`);
-
-    if (totalPages <= 1) {
-      return res.status(200).json({ items: firstItems });
+    if (!entity || !ALLOWED.includes(entity)) {
+      res.statusCode = 400;
+      return res.end(JSON.stringify({ error: 'entity not allowed: ' + entity }));
     }
 
-    // Шаг 2: загружаем все страницы строго последовательно
+    // Передаём все параметры кроме entity, добавляем api_key
+    urlParams.delete('entity');
+    urlParams.set('api_key', apiKey);
+    const url = 'https://' + domain + '/api/v1/module/fin/' + entity + '/list?' + urlParams.toString();
+
+    try {
+      const data = await httpsGet(url);
+      return res.end(JSON.stringify(data));
+    } catch(err) {
+      res.statusCode = 502;
+      return res.end(JSON.stringify({ error: err.message }));
+    }
+  }
+
+  if (req.method !== 'POST') {
+    res.statusCode = 405;
+    return res.end(JSON.stringify({ error: 'Method not allowed' }));
+  }
+
+  const apiKey = process.env.ASPRO_API_KEY;
+  if (!apiKey) {
+    res.statusCode = 500;
+    return res.end(JSON.stringify({ error: 'ASPRO_API_KEY not set' }));
+  }
+
+  // Read body manually — req.body is not auto-parsed in plain Vercel functions
+  const body = await readJsonBody(req);
+  const domain = body.domain;
+  const entity = body.entity;
+
+  if (!domain || !entity) {
+    res.statusCode = 400;
+    return res.end(JSON.stringify({ error: 'Missing domain or entity', got: { domain: !!domain, entity: !!entity } }));
+  }
+
+  if (!ALLOWED.includes(entity)) {
+    res.statusCode = 400;
+    return res.end(JSON.stringify({ error: 'entity not allowed' }));
+  }
+
+  const cleanDomain = domain.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  const base = 'https://' + cleanDomain + '/api/v1/module/fin/' + entity + '/list'
+    + '?api_key=' + encodeURIComponent(apiKey) + '&limit=' + PAGE_SIZE;
+
+  try {
+    const d0 = await httpsGet(base + '&page=1');
+    // If Aspro returns unexpected structure, expose it for debugging
+    if (!d0.response) {
+      res.statusCode = 502;
+      return res.end(JSON.stringify({ error: 'unexpected_aspro_response', raw: d0 }));
+    }
+    const firstItems = d0.response.items || [];
+    const total = d0.response.total || 0;
+
+    if (firstItems.length === 0 || total <= PAGE_SIZE) {
+      return res.end(JSON.stringify({ items: firstItems, total: total }));
+    }
+
+    const totalPages = Math.ceil(total / PAGE_SIZE);
     const allItems = [...firstItems];
 
     for (let page = 2; page <= Math.min(totalPages, 60); page++) {
-      const r = await fetch(base + '&page=' + page);
-      if (!r.ok) {
-        console.error(`[DDS] page ${page} failed: ${r.status}`);
-        break;
-      }
-      const d = await r.json();
-      const items = d?.response?.items || [];
+      const d = await httpsGet(base + '&page=' + page);
+      const items = (d.response && d.response.items) || [];
+      if (items.length === 0) break;
       allItems.push(...items);
-      console.log(`[DDS] ${entity} p${page}: ${allItems.length}/${total}`);
     }
 
-    return res.status(200).json({ items: allItems });
-
+    return res.end(JSON.stringify({ items: allItems, total: total }));
   } catch (err) {
-    console.error('[DDS] error:', err.message);
-    return res.status(500).json({ error: err.message });
+    res.statusCode = 502;
+    return res.end(JSON.stringify({ error: err.message }));
   }
 };
