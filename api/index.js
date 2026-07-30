@@ -118,15 +118,27 @@ function setF(ym,v,t){try{localStorage.setItem(lk(ym),JSON.stringify({v:v,t:t}))
 function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
 
 function loadAll(entity) {
-return fetch("/api/data", {
-method: "POST",
-headers: {"Content-Type": "application/json"},
-body: JSON.stringify({domain: DOMAIN, entity: entity})
-}).then(function(r) {
-return r.ok ? r.json() : Promise.reject("HTTP " + r.status);
-}).then(function(d) {
-return d.items || [];
-});
+var all = [], page = 1;
+function next() {
+  var p = new URLSearchParams();
+  p.append('entity', entity);
+  p.append('limit', '100');
+  p.append('page', String(page));
+  return fetch('/api/data?' + p.toString())
+    .then(function(r) {
+      if (!r.ok) throw new Error(entity + ' HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(d) {
+      var items = (d.response && d.response.items) || [];
+      all = all.concat(items);
+      var total = (d.response && d.response.total) || 0;
+      if (all.length >= total || items.length < 100) return all;
+      page++;
+      return next();
+    });
+}
+return next();
 }
 
 function calc(txMonth,txAll,cats,rng){
