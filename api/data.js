@@ -76,7 +76,7 @@ module.exports = async function handler(req, res) {
       res.statusCode = 502;
       return res.end(JSON.stringify({ error: 'unexpected_aspro_response', raw: d0 }));
     }
-    const firstItems = d0.response.items || [];
+    const firstItems = d0.response.items || d0.response.records || [];
     const total = d0.response.total || 0;
 
     if (firstItems.length === 0 || total <= PAGE_SIZE) {
@@ -88,7 +88,7 @@ module.exports = async function handler(req, res) {
 
     for (let page = 2; page <= Math.min(totalPages, 60); page++) {
       const d = await httpsGet(base + '&page=' + page);
-      const items = (d.response && d.response.items) || [];
+      const items = (d.response && (d.response.items || d.response.records)) || [];
       if (items.length === 0) break;
       allItems.push(...items);
     }
