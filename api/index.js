@@ -179,22 +179,22 @@ if(cat==="tr"){
 if(rp===24||rp===26){if(inc>0)trIn+=inc;if(out>0)trOut+=out;}
 return;
 }
-if(inc>0){
+if(inc){
 if(cat==="pr")pr+=inc;
 else if(cat==="pjIn"&&pOk){pjIn+=inc;piP[gp]=(piP[gp]||0)+inc;}
 else if(cat==="refund"&&pOk)refund+=inc;
 else if(cat==="skIn")skIn+=inc;
 else{poIn+=inc;}
 }
-if(out>0){
+if(out){
 if(cat==="zp")zp+=out;else if(cat==="km")km+=out;
 else if(cat==="ins")ins+=out;else if(cat==="bk")bk+=out;
 else if(cat==="lz")lz+=out;else if(cat==="ar")ar+=out;
 else if(cat==="buh")buh+=out;else if(cat==="ntax")ntax+=out;
-else if(cat==="po"){po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
+else if(cat==="po"){po+=out;if(out>0)poDet.push({date:tx.date,cat:cn,out:out});}
 else if(cat==="svc"){
 if(pOk){pjOut+=out;if(gp)poP[gp]=(poP[gp]||0)+out;}
-else{po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
+else{po+=out;if(out>0)poDet.push({date:tx.date,cat:cn,out:out});}
 }
 else if(cat==="skOut")skOut+=out;
 else if(!pOff){pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}
