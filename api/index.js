@@ -183,7 +183,7 @@ else if(cat==="refund"&&pOk)refund+=inc;
 else if(cat==="skIn")skIn+=inc;
 else{poIn+=inc;}
 }
-if(out>0){
+if(out){
 if(cat==="zp")zp+=out;else if(cat==="km")km+=out;
 else if(cat==="ins")ins+=out;else if(cat==="bk")bk+=out;
 else if(cat==="lz")lz+=out;else if(cat==="ar")ar+=out;
@@ -194,7 +194,7 @@ if(pOk){pjOut+=out;if(gp)poP[gp]=(poP[gp]||0)+out;}
 else{po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
 }
 else if(cat==="pct")pct+=out;
-else if(cat==="bg")bg+=out;
+else if(cat==="bg"){if(pOff)bg+=out;else{pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}}
 else if(cat==="skOut")skOut+=out;
 else if(!pOff){pjOut+=out;if(gp&&pOk)poP[gp]=(poP[gp]||0)+out;}
 else{po+=out;poDet.push({date:tx.date,cat:cn,out:out});}
