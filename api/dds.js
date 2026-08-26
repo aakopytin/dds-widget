@@ -64,8 +64,10 @@ details table td{font-size:11px;color:#555;padding:2px 4px}
 </head>
 <body>
 <div id="filters" style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">
-<select id="qs" style="font-size:12px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff;cursor:pointer"></select>
-<input type="date" id="sel-date" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff;cursor:pointer" title="Дата отчёта">
+<span style="font-size:11px;color:#9ca3af">с</span>
+<input type="date" id="sel-start" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff;cursor:pointer" title="Начало периода">
+<span style="font-size:11px;color:#9ca3af">по</span>
+<input type="date" id="sel-date" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff;cursor:pointer" title="Конец периода">
 </div>
 <div id="root" style="color:#9ca3af">ДДС — загрузка…</div>
 <script>
@@ -103,15 +105,18 @@ function fmt(v){if(v===null||v===undefined||v===0)return"—";return new Intl.Nu
 function fmtI(v){return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:0,maximumFractionDigits:0}).format(v||0);}
 function _ddsNum(s){if(!s&&s!==0)return 0;return parseFloat(String(s).replace(/[^0-9.-]/g,""))||0;}
 function getRange(){
-  var qs=document.getElementById("qs");
-  var val=qs?qs.value:"";
-  var now=new Date(),y=now.getFullYear(),q=Math.ceil((now.getMonth()+1)/3);
-  if(val){var pts=val.split(":");y=parseInt(pts[0],10);q=parseInt(pts[1],10);}
-  var s0=[y+"-01-01",y+"-04-01",y+"-07-01",y+"-10-01"][q-1];
-  var s1=[y+"-03-31",y+"-06-30",y+"-09-30",y+"-12-31"][q-1];
+  var p=function(v){return v<10?"0"+v:""+v;};
+  var now=new Date();
+  var todayStr=now.getFullYear()+"-"+p(now.getMonth()+1)+"-"+p(now.getDate());
+  var monthStartStr=now.getFullYear()+"-"+p(now.getMonth()+1)+"-01";
+  var ss=document.getElementById("sel-start");
+  var se=document.getElementById("sel-date");
+  var s0=ss&&ss.value?ss.value:monthStartStr;
+  var s1=se&&se.value?se.value:todayStr;
+  if(s0>s1)s0=s1;
   var d0=s0.slice(8)+"."+s0.slice(5,7)+"."+s0.slice(0,4);
   var d1=s1.slice(8)+"."+s1.slice(5,7)+"."+s1.slice(0,4);
-  return{s0:s0,s1:s1,d0:d0,d1:d1,label:"К"+q+" "+y,ymd:s0.slice(0,7)};
+  return{s0:s0,s1:s1,d0:d0,d1:d1,label:d0+" — "+d1,ymd:s0.slice(0,7)};
 }
 
 var lk=function(ym){return"dds_"+ACCOUNT_ID+"_"+ym;};
@@ -218,9 +223,9 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap){
       else if(cat==="skOut"){if(isV)vSkOut+=out;if(isT)tSkOut+=out;}
       else if(cat==="svc"){
         if(pOk){if(isV){vPjOut+=out;if(gp)poP_v[gp]=(poP_v[gp]||0)+out;}if(isT){tPjOut+=out;if(gp)poP_t[gp]=(poP_t[gp]||0)+out;}}
-        else{if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:tx.name||tx.description||""});}
+        else{if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.crm_account_id&&contrMap[tx.crm_account_id])||""});}
       }
-      else if(cat==="po"){if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:tx.name||tx.description||""});}
+      else if(cat==="po"){if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.crm_account_id&&contrMap[tx.crm_account_id])||""});}
       else if(cat==="pjOut"){
         if(pOk&&!pOff){if(isV){vPjOut+=out;if(gp)poP_v[gp]=(poP_v[gp]||0)+out;}if(isT){tPjOut+=out;if(gp)poP_t[gp]=(poP_t[gp]||0)+out;}}
         else{if(isV)vPjOutOff+=out;if(isT)tPjOutOff+=out;}
@@ -494,13 +499,15 @@ function load(reset){
   Promise.all([
     loadAll("transaction"),
     loadAll("categories"),
-    loadAll("transaction_pls",{"filter[category_id]":"3144,3147"}).catch(function(){return[];})
+    loadAll("transaction_pls",{"filter[category_id]":"3144,3147"}).catch(function(){return[];}),
+    loadAll("crm_account").catch(function(){return[];})
   ]).then(function(res){
-    var txAll=res[0],cats=res[1],pls=res[2];
+    var txAll=res[0],cats=res[1],pls=res[2],contrArr=res[3];
+    var contrMap={};(contrArr||[]).forEach(function(c){if(c.id)contrMap[c.id]=c.name||"";});
     var rng=getRange();
     var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=cutoff;});
     if(txM.length){
-      var r=calc(txM,txAll,cats,pls,rng,cutoff);
+      var r=calc(txM,txAll,cats,pls,rng,cutoff,contrMap);
       el.innerHTML=render(r,true);
       renderPoDet(r.poDet);
     }else{
@@ -515,29 +522,13 @@ function load(reset){
 }
 
 (function(){
-  var now=new Date(),cY=now.getFullYear(),cQ=Math.ceil((now.getMonth()+1)/3);
-  var defY=cY,defQ=cQ;
-  var qFirstMonths=[0,3,6,9];
-  if(qFirstMonths.indexOf(now.getMonth())>=0&&now.getDate()<=7){defQ=cQ-1;if(defQ===0){defQ=4;defY=cY-1;}}
-  var qs=document.getElementById("qs");
-  for(var y=cY;y>=cY-1;y--){
-    for(var q=4;q>=1;q--){
-      if(y===cY&&q>cQ)continue;
-      var o=document.createElement("option");
-      o.value=y+":"+q;o.textContent="К"+q+" "+y;
-      if(y===defY&&q===defQ)o.selected=true;
-      qs.appendChild(o);
-    }
-  }
-  qs.addEventListener("change",function(){load(false);});
-  // Инициализация датапикера: по умолчанию сегодня
-  (function(){
-    var sd=document.getElementById("sel-date");
-    if(!sd)return;
-    var n=new Date(),p=function(v){return v<10?"0"+v:""+v;};
-    sd.value=n.getFullYear()+"-"+p(n.getMonth()+1)+"-"+p(n.getDate());
-    sd.addEventListener("change",function(){load(false);});
-  })();
+  var n=new Date(),p=function(v){return v<10?"0"+v:""+v;};
+  var todayStr=n.getFullYear()+"-"+p(n.getMonth()+1)+"-"+p(n.getDate());
+  var monthStartStr=n.getFullYear()+"-"+p(n.getMonth()+1)+"-01";
+  var ss=document.getElementById("sel-start");
+  var se=document.getElementById("sel-date");
+  if(ss){ss.value=monthStartStr;ss.addEventListener("change",function(){load(false);});}
+  if(se){se.value=todayStr;se.addEventListener("change",function(){load(false);});}
 })();
 
 load(false);
