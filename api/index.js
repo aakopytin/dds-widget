@@ -76,7 +76,7 @@ var TOKEN="${esc(t)}";
 var API_BASE="${esc(h)}"?"https://${esc(h)}":(location.origin||"");
 
 var VSIP={2:1,4:1,5:1,6:1,7:1,8:1,166:1};  // 166=Альфа Т (ТБанк)
-var TT={18:1,26:1};
+var TT={18:1};  // 26 (Счет СМ ТТ) не включается в расчёт
 var OFF={24:1};
 var PN={1:"Кемерово",3:"Южно-Сахалинск",10:"Большое Болдино",25:"Южно-Сахалинск",13:"Барнаул",12:"Киров",23:"Сыктывкар",9:"Рузаевка",7:"Иволгинск",6:"Десногорск",102:"Голутвинский",100:"Центральный договор",101:"Прочие проекты"};
 var PO=[1,3,10,13,12,23,9,7,6,102,100,101];
@@ -218,9 +218,9 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap){
       else if(cat==="skOut"){if(isV)vSkOut+=out;if(isT)tSkOut+=out;}
       else if(cat==="svc"){
         if(pOk){if(isV){vPjOut+=out;if(gp)poP_v[gp]=(poP_v[gp]||0)+out;}if(isT){tPjOut+=out;if(gp)poP_t[gp]=(poP_t[gp]||0)+out;}}
-        else{if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.contractor_id&&contrMap[tx.contractor_id])||""});}
+        else{if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:tx.name||tx.description||""});}
       }
-      else if(cat==="po"){if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.contractor_id&&contrMap[tx.contractor_id])||""});}
+      else if(cat==="po"){if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:tx.name||tx.description||""});}
       else if(cat==="pjOut"){
         if(pOk&&!pOff){if(isV){vPjOut+=out;if(gp)poP_v[gp]=(poP_v[gp]||0)+out;}if(isT){tPjOut+=out;if(gp)poP_t[gp]=(poP_t[gp]||0)+out;}}
         else{if(isV)vPjOutOff+=out;if(isT)tPjOutOff+=out;}
@@ -494,15 +494,13 @@ function load(reset){
   Promise.all([
     loadAll("transaction"),
     loadAll("categories"),
-    loadAll("transaction_pls",{"filter[category_id]":"3144,3147"}).catch(function(){return[];}),
-    loadAll("contractor").catch(function(){return[];})
+    loadAll("transaction_pls",{"filter[category_id]":"3144,3147"}).catch(function(){return[];})
   ]).then(function(res){
-    var txAll=res[0],cats=res[1],pls=res[2],contractors=res[3];
-    var contrMap={};contractors.forEach(function(c){if(c.id)contrMap[c.id]=c.name||"";});
+    var txAll=res[0],cats=res[1],pls=res[2];
     var rng=getRange();
     var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=cutoff;});
     if(txM.length){
-      var r=calc(txM,txAll,cats,pls,rng,cutoff,contrMap);
+      var r=calc(txM,txAll,cats,pls,rng,cutoff);
       el.innerHTML=render(r,true);
       renderPoDet(r.poDet);
     }else{
