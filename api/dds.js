@@ -199,14 +199,14 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap){
       if(isT&&!intT){trIn_t+=inc;trOut_t+=out;}
       return;
     }
-    if(inc>0){
+    if(inc!==0){
       if(cat==="pr"){if(isV)vPr+=inc;if(isT)tPr+=inc;}
       else if(cat==="pjIn"&&pOk){if(isV){vPjIn+=inc;piP_v[gp]=(piP_v[gp]||0)+inc;}if(isT){tPjIn+=inc;piP_t[gp]=(piP_t[gp]||0)+inc;}}
       else if(cat==="refund"){if(isV){vRefund+=inc;if(pOk||pOff)refPG_v[gp]=1;}if(isT){tRefund+=inc;if(pOk||pOff)refPG_t[gp]=1;}}
       else if(cat==="skIn"){if(isV)vSkIn+=inc;if(isT)tSkIn+=inc;}
       else{if(isV)vPoIn+=inc;if(isT)tPoIn+=inc;}
     }
-    if(out>0){
+    if(out!==0){
       if(cat==="zp"){if(isV)vZp+=out;if(isT)tZp+=out;}
       else if(cat==="km"){if(isV)vKm+=out;if(isT)tKm+=out;}
       else if(cat==="ins"){if(isV)vIns+=out;if(isT)tIns+=out;}
@@ -223,9 +223,9 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap){
       else if(cat==="skOut"){if(isV)vSkOut+=out;if(isT)tSkOut+=out;}
       else if(cat==="svc"){
         if(pOk){if(isV){vPjOut+=out;if(gp)poP_v[gp]=(poP_v[gp]||0)+out;}if(isT){tPjOut+=out;if(gp)poP_t[gp]=(poP_t[gp]||0)+out;}}
-        else{if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.crm_account_id&&contrMap[tx.crm_account_id])||""});}
+        else{if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.crm_account_id&&contrMap[tx.crm_account_id])||"",org:isV?"ВСИП":"ТТ"});}
       }
-      else if(cat==="po"){if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.crm_account_id&&contrMap[tx.crm_account_id])||""});}
+      else if(cat==="po"){if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.crm_account_id&&contrMap[tx.crm_account_id])||"",org:isV?"ВСИП":"ТТ"});}
       else if(cat==="pjOut"){
         if(pOk&&!pOff){if(isV){vPjOut+=out;if(gp)poP_v[gp]=(poP_v[gp]||0)+out;}if(isT){tPjOut+=out;if(gp)poP_t[gp]=(poP_t[gp]||0)+out;}}
         else{if(isV)vPjOutOff+=out;if(isT)tPjOutOff+=out;}
@@ -479,6 +479,7 @@ function renderPoDet(poDet){
   poDet.sort(function(a,b){return b.out-a.out;}).forEach(function(p){
     var tr=document.createElement("tr");
     tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666;white-space:nowrap'>"+p.date+"</td>"
+      +"<td style='padding:2px 4px;font-size:10px;color:#9ca3af;white-space:nowrap'>"+(p.org||"")+"</td>"
       +"<td style='padding:2px 4px;font-size:10px;color:#374151;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+(p.contr||"—")+"</td>"
       +"<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat+"</td>"
       +"<td style='padding:2px 4px;font-size:10px;text-align:right;white-space:nowrap'>"+fmtI(p.out)+"</td>";
