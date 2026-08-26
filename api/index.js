@@ -65,6 +65,7 @@ details table td{font-size:11px;color:#555;padding:2px 4px}
 <body>
 <div id="filters" style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb">
 <select id="qs" style="font-size:12px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff;cursor:pointer"></select>
+<input type="date" id="sel-date" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff;cursor:pointer" title="Дата отчёта">
 </div>
 <div id="root" style="color:#9ca3af">ДДС — загрузка…</div>
 <script>
@@ -136,7 +137,7 @@ function loadAll(entity,extra){
   return next();
 }
 
-function calc(txMonth,txAll,cats,plsData,rng){
+function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap){
   var cMap={};
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
@@ -146,7 +147,8 @@ function calc(txMonth,txAll,cats,plsData,rng){
     var aid=tx.org_account_id;
     var inc=_ddsNum(tx.income)||0,out=_ddsNum(tx.outcome)||0;
     if(tx.date<rng.s0){if(VSIP[aid])vSt+=inc-out;if(TT[aid])tSt+=inc-out;}
-    if(tx.date<=rng.s1){if(VSIP[aid])vEnd+=inc-out;if(TT[aid])tEnd+=inc-out;}
+    var effEnd=cutoff||rng.s1;
+    if(tx.date<=effEnd){if(VSIP[aid])vEnd+=inc-out;if(TT[aid])tEnd+=inc-out;}
   });
 
   var vPr=0,tPr=0,vPjIn=0,tPjIn=0,piP_v={},piP_t={};
@@ -216,9 +218,9 @@ function calc(txMonth,txAll,cats,plsData,rng){
       else if(cat==="skOut"){if(isV)vSkOut+=out;if(isT)tSkOut+=out;}
       else if(cat==="svc"){
         if(pOk){if(isV){vPjOut+=out;if(gp)poP_v[gp]=(poP_v[gp]||0)+out;}if(isT){tPjOut+=out;if(gp)poP_t[gp]=(poP_t[gp]||0)+out;}}
-        else{if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out});}
+        else{if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.contractor_id&&contrMap[tx.contractor_id])||""});}
       }
-      else if(cat==="po"){if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out});}
+      else if(cat==="po"){if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.contractor_id&&contrMap[tx.contractor_id])||""});}
       else if(cat==="pjOut"){
         if(pOk&&!pOff){if(isV){vPjOut+=out;if(gp)poP_v[gp]=(poP_v[gp]||0)+out;}if(isT){tPjOut+=out;if(gp)poP_t[gp]=(poP_t[gp]||0)+out;}}
         else{if(isV)vPjOutOff+=out;if(isT)tPjOutOff+=out;}
@@ -361,45 +363,23 @@ function calc(txMonth,txAll,cats,plsData,rng){
 
 function HDR(){
   var sb="width:9px;padding:1px 2px;font-size:11px;font-weight:700;color:#374151;border-bottom:2px solid #9ca3af;text-align:right;white-space:nowrap;overflow:hidden";
-  var sn="width:7px;padding:1px 2px;font-size:11px;font-weight:700;color:#9ca3af;border-bottom:2px solid #9ca3af;text-align:right;white-space:nowrap;overflow:hidden";
   var sl="width:14px;padding:1px 2px;font-size:11px;font-weight:700;color:#374151;border-bottom:2px solid #9ca3af;overflow:hidden;white-space:nowrap;text-overflow:ellipsis";
-  return"<tr><td style='"+sl+"'></td><td style='"+sb+"'>Итого</td><td style='"+sb+"'>ВСИП</td><td style='"+sn+"'>НДС</td><td style='"+sb+"'>ТТ</td><td style='"+sn+"'>НДС</td></tr>";
+  return"<tr><td style='"+sl+"'></td><td style='"+sb+"'>Итого</td></tr>";
 }
 function TR6(l,tot,v,nv,t,nt,cls,ind){
   var cn="";if(cls==="g"&&(tot||0)>0)cn="color:#16a34a";if(cls==="r"&&(tot||0)<0)cn="color:#dc2626";if(cls==="m")cn="color:#6b7280";
   var sl="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 2px;color:#1f2937;font-size:12px"+(ind?";padding-left:8px":"");
-  var sr="padding:1px 2px;text-align:right;white-space:nowrap;font-size:12px;color:#1f2937";
-  var sc=sr+(cn?";"+cn:"");
-  var sn="padding:1px 2px;text-align:right;white-space:nowrap;font-size:11px;color:#6b7280";
-  return"<tr><td style='"+sl+"'>"+l+"</td><td style='"+sc+"'>"+fmt(tot)+"</td><td style='"+sr+"'>"+fmt(v)+"</td><td style='"+sn+"'>"+fmt(nv)+"</td><td style='"+sr+"'>"+fmt(t)+"</td><td style='"+sn+"'>"+fmt(nt)+"</td></tr>";
+  var sc="padding:1px 2px;text-align:right;white-space:nowrap;font-size:12px;color:#1f2937"+(cn?";"+cn:"");
+  return"<tr><td style='"+sl+"'>"+l+"</td><td style='"+sc+"'>"+fmt(tot)+"</td></tr>";
 }
 function SEP6(l,tot,v,nv,t,nt,cls){
   var cn="";if(cls==="g"&&(tot||0)>0)cn="color:#16a34a";if(cls==="r"&&(tot||0)<0)cn="color:#dc2626";
   var s="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 2px;font-weight:700;font-size:12px;color:#111827;border-top:1px solid #d1d5db";
-  var sr=s+";text-align:right;white-space:nowrap";var sc=sr+(cn?";"+cn:"");var sn=sr+";color:#6b7280;font-weight:400;font-size:11px";
-  return"<tr><td style='"+s+"'>"+l+"</td><td style='"+sc+"'>"+fmt(tot)+"</td><td style='"+sr+"'>"+fmt(v)+"</td><td style='"+sn+"'>"+fmt(nv)+"</td><td style='"+sr+"'>"+fmt(t)+"</td><td style='"+sn+"'>"+fmt(nt)+"</td></tr>";
+  var sc=s+";text-align:right;white-space:nowrap"+(cn?";"+cn:"");
+  return"<tr><td style='"+s+"'>"+l+"</td><td style='"+sc+"'>"+fmt(tot)+"</td></tr>";
 }
-function SEC(l){return"<tr><td colspan='6' style='padding:5px 4px 1px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#6b7280;border-top:1px solid #e5e7eb'>"+l+"</td></tr>";}
+function SEC(l){return"<tr><td colspan='2' style='padding:5px 4px 1px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#6b7280;border-top:1px solid #e5e7eb'>"+l+"</td></tr>";}
 
-// ─── Свод НДС — вспомогательные функции ──────────────────────────────────
-function VSPH(){
-  var s="width:55px;padding:1px 2px;font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #9ca3af;text-align:right;white-space:nowrap";
-  var sl="padding:1px 2px;font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #9ca3af";
-  return"<tr><td style='"+sl+"'></td><td style='"+s+"'>ВСИП</td><td style='"+s+"'>ТТ</td><td style='"+s+"'>Итого</td></tr>";
-}
-function VSPR(l,v,t,bold,cls){
-  var tot=(v||0)+(t||0);
-  var brd=bold?";border-top:1px solid #d1d5db":"";
-  var fw=bold?";font-weight:700":"";
-  var sl="padding:1px 2px;font-size:14px;color:#1f2937"+fw+brd;
-  var sr="padding:1px 2px;text-align:right;font-size:14px;white-space:nowrap;color:#1f2937"+fw+brd;
-  var cn="";
-  if(bold&&cls==="r")cn=";color:#dc2626";
-  else if(bold&&cls==="g")cn=";color:#16a34a";
-  else if(!bold){cn=cls==="r"&&tot>0?";color:#dc2626":cls==="g"&&tot<0?";color:#16a34a":"";}
-  return"<tr><td style='"+sl+cn+"'>"+l+"</td><td style='"+sr+cn+"'>"+fmt(v||0)+"</td><td style='"+sr+cn+"'>"+fmt(t||0)+"</td><td style='"+sr+cn+"'>"+fmt(tot)+"</td></tr>";
-}
-function VSPB(){return"<tr><td colspan='4' style='height:3px'></td></tr>";}
 
 function render(r,live){
   var rows=[];rows.push(HDR());
@@ -471,30 +451,6 @@ function render(r,live){
   rows.push(SEP6("ВСЕГО РАСХОДОВ",r.te+r.skOut-r.trNetto,null,r.vVatTotalOut||null,null,r.tVatTotalOut||null,""));
   rows.push(SEP6(r.cOk?"Контрольная сумма":"Контрольная сумма ⚠",r.ctrl,r.vCtrl,null,r.tCtrl,null,r.cOk?"g":"r"));
 
-  // ─── Свод НДС (справа) ──────────────────────────────────────────────────
-  // К уплате  = vVatTotalIn (3147 project income)
-  // К возмещению = vVatTotalOut (3144 project+office; vVatOffV уже внутри)
-  //              + vVatTrNet (нетто НДС по трансферам: уплачено − получено)
-  // БАЛАНС = К уплате − К возмещению (>0 красный = к уплате; <0 зелёный = возмещение)
-  var vVatTrNet=r.vVatTrOut-r.vVatTrIn;   // >0 = нетто отток ВСИП
-  var tVatTrNet=r.tVatTrOut-r.tVatTrIn;
-  var vatTotOut_v=r.vVatTotalOut+vVatTrNet;
-  var vatTotOut_t=r.tVatTotalOut+tVatTrNet;
-  var vatBalV=r.vVatTotalIn-vatTotOut_v;
-  var vatBalT=r.tVatTotalIn-vatTotOut_t;
-  var vst=[];
-  vst.push(VSPH());
-  vst.push(VSPR("НДС поступления",r.vVatTotalIn,r.tVatTotalIn,false,""));
-  vst.push(VSPR("К уплате",r.vVatTotalIn,r.tVatTotalIn,true,"r"));
-  vst.push(VSPB());
-  vst.push(VSPR("НДС проекты",r.vVatTotalOut-r.vVatOffV,r.tVatTotalOut-r.tVatOffV,false,""));
-  vst.push(VSPR("НДС офисные",r.vVatOffV,r.tVatOffV,false,""));
-  vst.push(VSPR("НДС трансф.",vVatTrNet,tVatTrNet,false,""));
-  vst.push(VSPR("К возмещению",vatTotOut_v,vatTotOut_t,true,"g"));
-  vst.push(VSPB());
-  var bCls=vatBalV>0?"r":vatBalV<0?"g":"";
-  vst.push(VSPR("БАЛАНС",vatBalV,vatBalT,true,bCls));
-
   var st=live?'<span style="color:#16a34a">● live · '+r.cnt+' тр.</span>':'<span style="color:#9ca3af">данные на '+r.d1+'</span>';
   return'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;">'
     +'<div><div style="font-size:14px;font-weight:600">ДДС — '+r.label+'</div>'
@@ -504,12 +460,7 @@ function render(r,live){
     +'<button id="btn" style="background:none;border:1px solid #d1d5db;color:#6b7280;font-size:11px;padding:1px 6px;border-radius:3px;cursor:pointer">↻</button>'
     +'<button id="rst" style="background:none;border:1px solid #d1d5db;color:#9ca3af;font-size:11px;padding:1px 5px;border-radius:3px;cursor:pointer">⟳₀</button>'
     +'</div></div>'
-    +'<div style="display:flex;gap:8px;align-items:flex-start">'
-    +'<div style="flex:1;min-width:0;overflow:hidden"><table style="table-layout:fixed;width:100%">'+rows.join('')+'</table></div>'
-    +'<div style="flex-shrink:0">'
-    +'<div style="font-size:10px;font-weight:700;color:#374151;border-bottom:2px solid #9ca3af;padding:1px 2px 2px">Свод НДС</div>'
-    +'<table style="border-collapse:collapse;table-layout:fixed">'+vst.join('')+'</table>'
-    +'</div></div>'
+    +'<table style="table-layout:fixed;width:100%">'+rows.join('')+'</table>'
     +'<div style="margin-top:5px;font-size:11px;color:#9ca3af">обновлено: '+new Date().toLocaleTimeString("ru-RU")+'</div>';
 }
 
@@ -522,7 +473,10 @@ function renderPoDet(poDet){
   var t=document.createElement("table");t.style.cssText="width:100%;border-collapse:collapse;margin-top:4px";
   poDet.sort(function(a,b){return b.out-a.out;}).forEach(function(p){
     var tr=document.createElement("tr");
-    tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.date+"</td><td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat+"</td><td style='padding:2px 4px;font-size:10px;text-align:right'>"+fmtI(p.out)+"</td>";
+    tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666;white-space:nowrap'>"+p.date+"</td>"
+      +"<td style='padding:2px 4px;font-size:10px;color:#374151;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+(p.contr||"—")+"</td>"
+      +"<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat+"</td>"
+      +"<td style='padding:2px 4px;font-size:10px;text-align:right;white-space:nowrap'>"+fmtI(p.out)+"</td>";
     t.appendChild(tr);
   });
   d.appendChild(t);document.getElementById("root").appendChild(d);
@@ -530,19 +484,25 @@ function renderPoDet(poDet){
 
 function load(reset){
   var el=document.getElementById("root"),rng=getRange();
+  var selDate=document.getElementById("sel-date");
+  var cutoff=selDate?selDate.value:"";
+  if(!cutoff){var _n=new Date();var _p=function(v){return v<10?"0"+v:""+v;};cutoff=_n.getFullYear()+"-"+_p(_n.getMonth()+1)+"-"+_p(_n.getDate());}
+  if(cutoff<rng.s0)cutoff=rng.s0;if(cutoff>rng.s1)cutoff=rng.s1;
   if(reset)clrF(rng.ymd);
   var s=document.getElementById("st");
   if(s){s.textContent="загрузка…";s.style.color="#9ca3af";}
   Promise.all([
     loadAll("transaction"),
     loadAll("categories"),
-    loadAll("transaction_pls",{"filter[category_id]":"3144,3147"}).catch(function(){return[];})
+    loadAll("transaction_pls",{"filter[category_id]":"3144,3147"}).catch(function(){return[];}),
+    loadAll("contractor").catch(function(){return[];})
   ]).then(function(res){
-    var txAll=res[0],cats=res[1],pls=res[2];
+    var txAll=res[0],cats=res[1],pls=res[2],contractors=res[3];
+    var contrMap={};contractors.forEach(function(c){if(c.id)contrMap[c.id]=c.name||"";});
     var rng=getRange();
-    var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
+    var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=cutoff;});
     if(txM.length){
-      var r=calc(txM,txAll,cats,pls,rng);
+      var r=calc(txM,txAll,cats,pls,rng,cutoff,contrMap);
       el.innerHTML=render(r,true);
       renderPoDet(r.poDet);
     }else{
@@ -572,6 +532,14 @@ function load(reset){
     }
   }
   qs.addEventListener("change",function(){load(false);});
+  // Инициализация датапикера: по умолчанию сегодня
+  (function(){
+    var sd=document.getElementById("sel-date");
+    if(!sd)return;
+    var n=new Date(),p=function(v){return v<10?"0"+v:""+v;};
+    sd.value=n.getFullYear()+"-"+p(n.getMonth()+1)+"-"+p(n.getDate());
+    sd.addEventListener("change",function(){load(false);});
+  })();
 })();
 
 load(false);
