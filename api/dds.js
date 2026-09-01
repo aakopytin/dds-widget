@@ -69,8 +69,9 @@ details table td{font-size:11px;color:#555;padding:2px 4px}
 <span style="font-size:11px;color:#9ca3af">по</span>
 <input type="date" id="sel-date" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff;cursor:pointer" title="Конец периода">
 </div>
-<div id="root" style="color:#9ca3af">ДДС — загрузка…</div>
-<div id="budget-wrap" style="margin-top:20px;padding-top:14px;border-top:2px solid #e5e7eb">
+<div style="display:flex;gap:20px;align-items:flex-start">
+<div id="root" style="flex:0 0 300px;min-width:200px;color:#9ca3af">ДДС — загрузка…</div>
+<div id="budget-wrap" style="flex:1 1 auto;min-width:260px;padding-top:430px">
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
     <span style="font-size:12px;font-weight:700;color:#374151">Бюджет-факт по проекту</span>
     <select id="bgt-proj" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff">
@@ -87,6 +88,7 @@ details table td{font-size:11px;color:#555;padding:2px 4px}
     <select id="bgt-month" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff"></select>
   </div>
   <div id="bgt-root" style="color:#9ca3af;font-size:11px">загрузка…</div>
+</div>
 </div>
 <script>
 (function(){
