@@ -69,9 +69,8 @@ details table td{font-size:11px;color:#555;padding:2px 4px}
 <span style="font-size:11px;color:#9ca3af">по</span>
 <input type="date" id="sel-date" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff;cursor:pointer" title="Конец периода">
 </div>
-<div style="display:flex;gap:20px;align-items:flex-start">
-<div id="root" style="flex:0 0 300px;min-width:200px;color:#9ca3af">ДДС — загрузка…</div>
-<div id="budget-wrap" style="flex:1 1 auto;min-width:260px;padding-top:430px">
+<div id="root" style="color:#9ca3af">ДДС — загрузка…</div>
+<div id="budget-wrap" style="margin-top:20px;padding-top:14px;border-top:2px solid #e5e7eb">
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
     <span style="font-size:12px;font-weight:700;color:#374151">Бюджет-факт по проекту</span>
     <select id="bgt-proj" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff">
@@ -89,7 +88,6 @@ details table td{font-size:11px;color:#555;padding:2px 4px}
   </div>
   <div id="bgt-root" style="color:#9ca3af;font-size:11px">загрузка…</div>
 </div>
-</div>
 <script>
 (function(){
 var DOMAIN="${esc(d)}";
@@ -97,6 +95,7 @@ var ACCOUNT_ID="${esc(a)}";
 var TOKEN="${esc(t)}";
 var API_BASE="${esc(h)}"?"https://${esc(h)}":(location.origin||"");
 
+var _bgtTxCache=null, _bgtCatCache=null;  // кэш для таблицы Бюджет-факт
 var VSIP={2:1,4:1,5:1,6:1,7:1,8:1,166:1};  // 166=Альфа Т (ТБанк)
 var TT={18:1};  // 26 (Счет СМ ТТ) не включается в расчёт
 var OFF={24:1};
@@ -524,6 +523,8 @@ function load(reset){
     loadAll("crm_account").catch(function(){return[];})
   ]).then(function(res){
     var txAll=res[0],cats=res[1],pls=res[2],contrArr=res[3];
+    _bgtTxCache=txAll; _bgtCatCache=cats;  // кэшируем для таблицы Бюджет-факт
+    loadBudget();
     var contrMap={};(contrArr||[]).forEach(function(c){if(c.id)contrMap[c.id]=c.name||"";});
     var rng=getRange();
     var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=cutoff;});
@@ -569,12 +570,9 @@ function loadBudget(){
   var me=ym+"-"+(mEnd<10?"0":"")+mEnd;
   var bgtEl=document.getElementById("bgt-root");
   bgtEl.innerHTML="<span style='color:#9ca3af;font-size:11px'>загрузка...</span>";
-  Promise.all([
-    loadAll("plan_money",{"filter[plan_paid_date][start_date]":ms,"filter[plan_paid_date][end_date]":me}),
-    loadAll("transaction",{"filter[date][start_date]":ms,"filter[date][end_date]":me}),
-    loadAll("categories")
-  ]).then(function(res){
-    var plans=res[0]||[],txns=res[1]||[],cats=res[2]||[];
+  loadAll("plan_money").then(function(plans){
+    plans=plans||[];
+    var txns=_bgtTxCache||[], cats=_bgtCatCache||[];
     var cMap={};
     cats.forEach(function(c){cMap[parseInt(c.id)]={name:c.name||"",parent_id:parseInt(c.parent_id)||0};});
     function rootParent(cid){
@@ -582,19 +580,23 @@ function loadBudget(){
       while(cur&&n++<10){var c=cMap[cur];if(!c||!c.parent_id)return cur;cur=c.parent_id;}
       return cur||cid;
     }
-    // Бюджет: org_account_id=36, project_id=proj, type=40
+    // Бюджет: org_account_id=36, project_id=proj, type=40, фильтр по plan_paid_date
     var bud={};
     plans.forEach(function(p){
       if(parseInt(p.org_account_id)!==36)return;
       if(parseInt(p.project_id)!==proj)return;
       if(parseInt(p.type)!==40)return;
+      var pd=p.plan_paid_date||"";
+      if(pd<ms||pd>me)return;
       var cid=parseInt(p.category_id);
       bud[cid]=(bud[cid]||0)+(parseFloat(p.total)||0);
     });
-    // Факт: только расходы, исключить org_id=3 и переводы/НДС
+    // Факт: из кэша основного load() — те же транзакции что и в верхней таблице
     var fct={};
     var SKIP={1004:1,1007:1,3144:1,3147:1,3157:1,3158:1};
     txns.forEach(function(tx){
+      var td=tx.date||"";
+      if(td<ms||td>me)return;
       if(parseInt(tx.project_id)!==proj)return;
       if(parseInt(tx.org_id)===3)return;
       var cid=parseInt(tx.category_id);
@@ -676,7 +678,7 @@ function loadBudget(){
   }
   var pp=document.getElementById("bgt-proj");
   if(pp)pp.addEventListener("change",loadBudget);
-  loadBudget();
+  // loadBudget() вызывается из load().then после заполнения кэша
 })();
 
 })();
