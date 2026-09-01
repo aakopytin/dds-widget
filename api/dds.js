@@ -83,6 +83,7 @@ details table td{font-size:11px;color:#555;padding:2px 4px}
       <option value="6">Десногорск</option>
       <option value="7">Иволгинск</option>
       <option value="10">Большое Болдино</option>
+      <option value="102">Голутвинский</option>
     </select>
     <select id="bgt-month" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff"></select>
   </div>
