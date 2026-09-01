@@ -581,24 +581,28 @@ function loadBudget(){
       while(cur&&n++<10){var c=cMap[cur];if(!c||!c.parent_id)return cur;cur=c.parent_id;}
       return cur||cid;
     }
-    // Бюджет: org_account_id=36, project_id=proj, type=40, фильтр по plan_paid_date
+    // Бюджет: org_account_id=36, project_id=proj (с учётом PG), type=40, фильтр по plan_paid_date
     var bud={};
     plans.forEach(function(p){
       if(parseInt(p.org_account_id)!==36)return;
-      if(parseInt(p.project_id)!==proj)return;
+      var ppid=parseInt(p.project_id)||0;
+      var pgp=(ppid&&PG[ppid])?PG[ppid]:ppid;
+      if(pgp!==proj)return;
       if(parseInt(p.type)!==40)return;
       var pd=p.plan_paid_date||"";
       if(pd<ms||pd>me)return;
       var cid=parseInt(p.category_id);
       bud[cid]=(bud[cid]||0)+(parseFloat(p.total)||0);
     });
-    // Факт: из кэша основного load() — те же транзакции что и в верхней таблице
+    // Факт: из кэша основного load() — с той же PG-логикой что и в верхней таблице
     var fct={};
     var SKIP={1004:1,1007:1,3144:1,3147:1,3157:1,3158:1};
     txns.forEach(function(tx){
       var td=tx.date||"";
       if(td<ms||td>me)return;
-      if(parseInt(tx.project_id)!==proj)return;
+      var pid=parseInt(tx.project_id)||0;
+      var gp=(pid&&PG[pid])?PG[pid]:pid;
+      if(gp!==proj)return;
       if(parseInt(tx.org_id)===3)return;
       var cid=parseInt(tx.category_id);
       if(SKIP[cid])return;
