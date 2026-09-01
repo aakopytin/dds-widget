@@ -70,6 +70,24 @@ details table td{font-size:11px;color:#555;padding:2px 4px}
 <input type="date" id="sel-date" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff;cursor:pointer" title="Конец периода">
 </div>
 <div id="root" style="color:#9ca3af">ДДС — загрузка…</div>
+<div id="budget-wrap" style="margin-top:20px;padding-top:14px;border-top:2px solid #e5e7eb">
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+    <span style="font-size:12px;font-weight:700;color:#374151">Бюджет-факт по проекту</span>
+    <select id="bgt-proj" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff">
+      <option value="12">Киров</option>
+      <option value="1">Кемерово</option>
+      <option value="13">Барнаул</option>
+      <option value="23">Сыктывкар</option>
+      <option value="3">Ю-Сахалинск</option>
+      <option value="9">Рузаевка</option>
+      <option value="6">Десногорск</option>
+      <option value="7">Иволгинск</option>
+      <option value="10">Большое Болдино</option>
+    </select>
+    <select id="bgt-month" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff"></select>
+  </div>
+  <div id="bgt-root" style="color:#9ca3af;font-size:11px">загрузка…</div>
+</div>
 <script>
 (function(){
 var DOMAIN="${esc(d)}";
@@ -534,6 +552,131 @@ function load(reset){
 
 load(false);
 setInterval(function(){load(false);},5*60*1000);
+
+// ===== БЮДЖЕТ-ФАКТ =====
+function loadBudget(){
+  var projEl=document.getElementById("bgt-proj");
+  var monthEl=document.getElementById("bgt-month");
+  if(!projEl||!monthEl)return;
+  var proj=parseInt(projEl.value);
+  var ym=monthEl.value;
+  if(!ym)return;
+  var ms=ym+"-01";
+  var yr=parseInt(ym.slice(0,4)),mo=parseInt(ym.slice(5,7));
+  var mEnd=new Date(yr,mo,0).getDate();
+  var me=ym+"-"+(mEnd<10?"0":"")+mEnd;
+  var bgtEl=document.getElementById("bgt-root");
+  bgtEl.innerHTML="<span style='color:#9ca3af;font-size:11px'>загрузка...</span>";
+  Promise.all([
+    loadAll("plan_money",{"filter[plan_paid_date][start_date]":ms,"filter[plan_paid_date][end_date]":me}),
+    loadAll("transaction",{"filter[date][start_date]":ms,"filter[date][end_date]":me}),
+    loadAll("categories")
+  ]).then(function(res){
+    var plans=res[0]||[],txns=res[1]||[],cats=res[2]||[];
+    var cMap={};
+    cats.forEach(function(c){cMap[parseInt(c.id)]={name:c.name||"",parent_id:parseInt(c.parent_id)||0};});
+    function rootParent(cid){
+      var cur=cid,n=0;
+      while(cur&&n++<10){var c=cMap[cur];if(!c||!c.parent_id)return cur;cur=c.parent_id;}
+      return cur||cid;
+    }
+    // Бюджет: org_account_id=36, project_id=proj, type=40
+    var bud={};
+    plans.forEach(function(p){
+      if(parseInt(p.org_account_id)!==36)return;
+      if(parseInt(p.project_id)!==proj)return;
+      if(parseInt(p.type)!==40)return;
+      var cid=parseInt(p.category_id);
+      bud[cid]=(bud[cid]||0)+(parseFloat(p.total)||0);
+    });
+    // Факт: только расходы, исключить org_id=3 и переводы/НДС
+    var fct={};
+    var SKIP={1004:1,1007:1,3144:1,3147:1,3157:1,3158:1};
+    txns.forEach(function(tx){
+      if(parseInt(tx.project_id)!==proj)return;
+      if(parseInt(tx.org_id)===3)return;
+      var cid=parseInt(tx.category_id);
+      if(SKIP[cid])return;
+      var amt=(parseFloat(tx.outcome)||0)-(parseFloat(tx.income)||0);
+      if(amt<=0)return;
+      fct[cid]=(fct[cid]||0)+amt;
+    });
+    var allCids={};
+    Object.keys(bud).forEach(function(k){allCids[k]=1;});
+    Object.keys(fct).forEach(function(k){allCids[k]=1;});
+    var MAT=4,SMR=3109;
+    var gMat=[],gSmr=[],gOth=[];
+    Object.keys(allCids).forEach(function(k){
+      var cid=parseInt(k),rp=rootParent(cid);
+      if(rp===MAT)gMat.push(cid);
+      else if(rp===SMR)gSmr.push(cid);
+      else gOth.push(cid);
+    });
+    var byNm=function(a,b){return((cMap[a]&&cMap[a].name)||"").localeCompare((cMap[b]&&cMap[b].name)||"","ru");};
+    gMat.sort(byNm);gSmr.sort(byNm);gOth.sort(byNm);
+    var fmt=function(v){return new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(Math.round(v||0));};
+    var TD="padding:2px 6px;font-size:11px;";
+    var TDR=TD+"text-align:right;white-space:nowrap;";
+    function dClr(d){return d<-100?"#dc2626":d>100?"#15803d":"#6b7280";}
+    function row(lbl,b,f,ind,bold,bg){
+      var d=b-f,fw=bold?"font-weight:600;":"";
+      return "<tr style='background:"+(bg||"transparent")+"'>"
+        +"<td style='"+TD+fw+"padding-left:"+(ind||4)+"px'>"+lbl+"</td>"
+        +"<td style='"+TDR+fw+"'>"+fmt(b)+"</td>"
+        +"<td style='"+TDR+fw+"'>"+fmt(f)+"</td>"
+        +"<td style='"+TDR+fw+"color:"+dClr(d)+"'>"+fmt(d)+"</td>"
+        +"</tr>";
+    }
+    function section(cids,lbl){
+      if(!cids.length)return"";
+      var sB=0,sF=0,rows="";
+      cids.forEach(function(cid){
+        var b=bud[cid]||0,f=fct[cid]||0;
+        sB+=b;sF+=f;
+        rows+=row((cMap[cid]&&cMap[cid].name)||("кат."+cid),b,f,14,false,"");
+      });
+      return row(lbl,sB,sF,4,true,"#eff6ff")+rows+row("Итого: "+lbl,sB,sF,4,false,"#f3f4f6");
+    }
+    var tB=0,tF=0;
+    Object.keys(bud).forEach(function(k){tB+=bud[k]||0;});
+    Object.keys(fct).forEach(function(k){tF+=fct[k]||0;});
+    var html="<table style='width:100%;border-collapse:collapse;border:1px solid #e5e7eb'>"
+      +"<thead><tr style='background:#f8f9fd;border-bottom:2px solid #e5e7eb'>"
+      +"<th style='"+TD+"text-align:left;font-weight:600'>Статья</th>"
+      +"<th style='"+TDR+"font-weight:600'>Бюджет</th>"
+      +"<th style='"+TDR+"font-weight:600'>Факт</th>"
+      +"<th style='"+TDR+"font-weight:600'>Остаток</th>"
+      +"</tr></thead><tbody>"
+      +section(gMat,"Материалы")
+      +section(gSmr,"СМР")
+      +section(gOth,"Прочие")
+      +row("ИТОГО",tB,tF,4,true,"#e0e7ff")
+      +"</tbody></table>";
+    bgtEl.innerHTML=html;
+  }).catch(function(e){
+    bgtEl.innerHTML="<span style='color:#dc2626;font-size:11px'>Ошибка: "+e+"</span>";
+  });
+}
+(function(){
+  var mp=document.getElementById("bgt-month");
+  if(mp){
+    var n=new Date(),cy=n.getFullYear(),cm=n.getMonth()+1;
+    for(var i=0;i<12;i++){
+      var d2=new Date(cy,cm-1-i,1);
+      var y2=d2.getFullYear(),m2=d2.getMonth()+1;
+      var ym2=y2+"-"+(m2<10?"0":"")+m2;
+      var opt=document.createElement("option");
+      opt.value=ym2;opt.textContent=(m2<10?"0":"")+m2+"."+y2;
+      if(i===0)opt.selected=true;
+      mp.appendChild(opt);
+    }
+    mp.addEventListener("change",loadBudget);
+  }
+  var pp=document.getElementById("bgt-proj");
+  if(pp)pp.addEventListener("change",loadBudget);
+  loadBudget();
+})();
+
 })();
 </script>
 </body>
