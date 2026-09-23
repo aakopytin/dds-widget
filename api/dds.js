@@ -100,7 +100,7 @@ var _bgtTxCache=null, _bgtCatCache=null;  // кэш для таблицы Бюд
 var VSIP={2:1,3:1,4:1,5:1,6:1,7:1,8:1,161:1,166:1};  // 3=ИП и СС, 161=Прочие счета, 166=Альфа Т (ТБанк)
 var TT={18:1};  // 26 (Счет СМ ТТ) не включается в расчёт
 var OFF={24:1};
-var PN={1:"Кемерово",3:"Южно-Сахалинск",10:"Большое Болдино",25:"Южно-Сахалинск",13:"Барнаул",12:"Киров",23:"Сыктывкар",9:"Рузаевка",7:"Иволгинск",6:"Десногорск",102:"Голутвинский",100:"Центральный договор",101:"Прочие проекты"};
+var PN={1:"Кемерово",2:"Рассказово (ЦДА Тамбов)",3:"Южно-Сахалинск",4:"Омутнинск (ЦДА Омутнинск)",5:"Строитель",6:"Десногорск (ЦДА Смоленск)",7:"Иволгинск (ЦДА Иволгинск)",8:"Прочие проекты ИКП",9:"Рузаевка (ЦДА Рузаевка)",10:"Большое Болдино (ЦДА Болдино)",11:"Новокуйбышевск",12:"Киров",13:"Барнаул",14:"Тамбов",15:"Одинцово",16:"Покровское",17:"Прочие проекты РСХБ",18:"Уни",19:"Красногорское",20:"Чечня",21:"Сити",22:"Гарпия",23:"Сыктывкар",24:"ВСИП Офис",25:"Типовой проект",26:"ТТ общие расходы",29:"Первомайское",30:"Угловское",31:"Тогул",32:"Менжинского",33:"Голутвинский",34:"Толбазы (ЦДА Толбазы)",35:"Внепроектные расходы",36:"Корректировки НДС",100:"Центральный договор",101:"Прочие проекты",102:"Голутвинский"};
 var PO=[1,3,10,13,12,23,9,7,6,102,100,101];
 var PG={2:100,4:101,18:100,19:100,21:101,29:100,30:100,31:100,32:100,33:102,17:101,20:101,22:101,28:101};
 var AC={
@@ -207,7 +207,7 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap){
     var isV=!!VSIP[aid],isT=!!TT[aid];
     if(!isV&&!isT)return;
     var rp=pid,gp=(rp&&PG[rp])?PG[rp]:rp;
-    var pOk=rp&&rp!==28&&!!(projMap&&projMap[rp]||PN[gp]),pOff=rp&&!!OFF[rp];
+    var pOk=rp&&rp!==28&&rp!==27&&!!(projMap&&projMap[rp]||PN[gp]),pOff=rp&&!!OFF[rp];
     var cat=AC[cn];
 
     if(cat==="tr"){
@@ -286,7 +286,7 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap){
     if(!is3144&&!is3147)return;
     var pid=p.project_id||0;
     var gp=(pid&&PG[pid])?PG[pid]:pid;
-    var pOk=pid&&pid!==28&&!!(projMap&&projMap[pid]||PN[gp]);
+    var pOk=pid&&pid!==28&&pid!==27&&!!(projMap&&projMap[pid]||PN[gp]);
     if(is3147){
       // НДС поступлений: pid=27 всегда→trIn; per-project→piP; refund→refV; else→vVatTr
       var inc47=_ddsNum(p.income)||0;if(!inc47)return;
@@ -548,7 +548,7 @@ function load(reset){
     var projMap={};
     (projArr||[]).forEach(function(p){
       var pid=parseInt(p.id);
-      if(pid&&pid!==28)projMap[pid]=p.name||p.title||('Проект '+pid);
+      if(pid&&pid!==28&&pid!==27)projMap[pid]=p.name||p.title||('Проект '+pid);
     });
     var rng=getRange();
     var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=cutoff;});
