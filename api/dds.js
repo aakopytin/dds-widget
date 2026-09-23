@@ -110,7 +110,7 @@ var AC={
 "Проценты к получению":"pr","НДС исходящий":"pr","Налог - НДС":"pr",
 "Зарплата":"zp","Налоги с зарплаты":"zp","Командировки":"km","Страхование":"ins",
 "Расходы на услуги банков":"bk","Банковские услуги":"bk","Расходы на лизинг":"lz",
-"Аренда":"ar","Бухгалтерия":"buh","Налоги и взносы":"ntax","Налоги - НДС":"ntax",
+"Аренда":"ar","Бухгалтерия":"buh","Налоги и взносы":"ntax","Налог на прибыль":"ntax","Налоги - НДС":"ntax",
 "Прочее":"po","Интернет и связь":"po","Проценты к уплате":"pct","Оборудование":"po",
 "Возвраты клиентам":"pjOut","Нераспределенные":"po","Нераспределенные (списание)":"po","Офис":"po",
 "СМР (Без детализации)":"pjOut","СМР Вент+кондиц":"pjOut",
@@ -186,6 +186,7 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap){
   var trIn_v=0,trOut_v=0,trIn_t=0,trOut_t=0;
   var vSkIn=0,tSkIn=0,vSkOut=0,tSkOut=0;
   var poDet=[];
+  var epCat_v={},epCat_t={};  // Внепроектные расходы (project_id=35) по категориям
 
   // Pre-pass: determine which transfer reference_ids are internal (both legs same org)
   var trRef={};
@@ -227,7 +228,12 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap){
       else{if(isV)vPoIn+=inc;if(isT)tPoIn+=inc;}
     }
     if(out!==0){
-      if(cat==="zp"){if(pOk&&!pOff){if(isV){vPjOut+=out;poP_v[rp]=(poP_v[rp]||0)+out;}if(isT){tPjOut+=out;poP_t[rp]=(poP_t[rp]||0)+out;}}else{if(isV)vZp+=out;if(isT)tZp+=out;}}
+      if(rp===35){
+        // Внепроектные расходы: аккумулируем по коду категории
+        var epKey=cat||"po";
+        if(isV)epCat_v[epKey]=(epCat_v[epKey]||0)+out;
+        if(isT)epCat_t[epKey]=(epCat_t[epKey]||0)+out;
+      } else if(cat==="zp"){if(pOk&&!pOff){if(isV){vPjOut+=out;poP_v[rp]=(poP_v[rp]||0)+out;}if(isT){tPjOut+=out;poP_t[rp]=(poP_t[rp]||0)+out;}}else{if(isV)vZp+=out;if(isT)tZp+=out;}}
       else if(cat==="km"){if(isV)vKm+=out;if(isT)tKm+=out;}
       else if(cat==="ins"){if(isV)vIns+=out;if(isT)tIns+=out;}
       else if(cat==="bk"){if(isV)vBk+=out;if(isT)tBk+=out;}
@@ -354,13 +360,17 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap){
   var zp=vZp+tZp,km=vKm+tKm,bk=vBk+tBk,ins=vIns+tIns;
   var lz=vLz+tLz,ar=vAr+tAr,buh=vBuh+tBuh,ntax=vNtax+tNtax;
   var po=vPo+tPo,pct=vPct+tPct,bg=vBg+tBg;
-  var te=pjOut+pjOutOff+zp+km+bk+ins+lz+ar+buh+ntax+po+pct+bg;
+  var vEpTotal=0,tEpTotal=0;
+  Object.keys(epCat_v).forEach(function(k){vEpTotal+=epCat_v[k]||0;});
+  Object.keys(epCat_t).forEach(function(k){tEpTotal+=epCat_t[k]||0;});
+  var epTotal=vEpTotal+tEpTotal;
+  var te=pjOut+pjOutOff+zp+km+bk+ins+lz+ar+buh+ntax+po+pct+bg+epTotal;
   var skIn=vSkIn+tSkIn,skOut=vSkOut+tSkOut;
   var trNetto=(trIn_v+trIn_t)-(trOut_v+trOut_t);
   var tS=vSt+tSt,tE=vEnd+tEnd;
   var ctrl=tS+tot+skIn-(te+skOut-trNetto)-tE;
-  var vCtrl=vSt+(vPjIn+vPr+vRefund+vPoIn+vSkIn+trIn_v)-(vPjOut+vPjOutOff+vZp+vKm+vBk+vIns+vLz+vAr+vBuh+vNtax+vPo+vPct+vBg+vSkOut+trOut_v)-vEnd;
-  var tCtrl=tSt+(tPjIn+tPr+tRefund+tPoIn+tSkIn+trIn_t)-(tPjOut+tPjOutOff+tZp+tKm+tBk+tIns+tLz+tAr+tBuh+tNtax+tPo+tPct+tBg+tSkOut+trOut_t)-tEnd;
+  var vCtrl=vSt+(vPjIn+vPr+vRefund+vPoIn+vSkIn+trIn_v)-(vPjOut+vPjOutOff+vZp+vKm+vBk+vIns+vLz+vAr+vBuh+vNtax+vPo+vPct+vBg+vSkOut+trOut_v+vEpTotal)-vEnd;
+  var tCtrl=tSt+(tPjIn+tPr+tRefund+tPoIn+tSkIn+trIn_t)-(tPjOut+tPjOutOff+tZp+tKm+tBk+tIns+tLz+tAr+tBuh+tNtax+tPo+tPct+tBg+tSkOut+trOut_t+tEpTotal)-tEnd;
   var cOk=Math.abs(ctrl)<1;
 
   return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,tS:tS,tE:tE,
@@ -383,7 +393,8 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap){
     vVatBuh:vVatBuh,tVatBuh:tVatBuh,vVatNtax:vVatNtax,tVatNtax:tVatNtax,vVatPo:vVatPo,tVatPo:tVatPo,
     vVatPct:vVatPct,tVatPct:tVatPct,vVatBg:vVatBg,tVatBg:tVatBg,vVatPjOutOff:vVatPjOutOff,tVatPjOutOff:tVatPjOutOff,
     vVatTotalIn:vVatTotalIn,tVatTotalIn:tVatTotalIn,vVatTotalOut:vVatTotalOut,tVatTotalOut:tVatTotalOut,
-    ctrl:ctrl,vCtrl:vCtrl,tCtrl:tCtrl,cOk:cOk,poDet:poDet,cnt:txMonth.length,d0:rng.d0,d1:rng.d1,label:rng.label,ymd:rng.ymd};
+    ctrl:ctrl,vCtrl:vCtrl,tCtrl:tCtrl,cOk:cOk,poDet:poDet,cnt:txMonth.length,d0:rng.d0,d1:rng.d1,label:rng.label,ymd:rng.ymd,
+    epCat_v:epCat_v,epCat_t:epCat_t,vEpTotal:vEpTotal,tEpTotal:tEpTotal};
 }
 
 function HDR(){
@@ -472,6 +483,35 @@ function render(r,live,projMap){
   var offV=r.vZp+r.vKm+r.vBk+r.vIns+r.vLz+r.vAr+r.vBuh+r.vNtax+r.vPo+r.vPct+r.vBg+r.vPjOutOff;
   var offT=r.tZp+r.tKm+r.tBk+r.tIns+r.tLz+r.tAr+r.tBuh+r.tNtax+r.tPo+r.tPct+r.tBg+r.tPjOutOff;
   rows.push(SEP6("Итого офисные",r.zp+r.km+r.bk+r.ins+r.lz+r.ar+r.buh+r.ntax+r.po+r.pct+r.bg+(r.pjOutOff||0),offV,r.vVatOffV||null,offT,r.tVatOffV||null,""));
+
+  // ── Внепроектные расходы (project_id=35) ───────────────────────────────
+  var epHasData=false;
+  Object.keys(r.epCat_v).forEach(function(k){if(r.epCat_v[k]>0)epHasData=true;});
+  Object.keys(r.epCat_t).forEach(function(k){if(r.epCat_t[k]>0)epHasData=true;});
+  if(epHasData){
+    var epLabels={
+      zp:"Зарплата",km:"Командировочные",ins:"Страхование",bk:"Банковские комиссии",
+      lz:"Лизинг",ar:"Аренда",buh:"Бухгалтерия",ntax:"Налоги и взносы",
+      pct:"Проценты к уплате",bg:"Банковские гарантии",
+      pjOut:"Производственные расходы",svc:"Услуги",po:"Прочие",
+      refund:"Возвраты клиентам",skOut:"Погашение займов"
+    };
+    var epOrder=["zp","km","ins","bk","lz","ar","buh","ntax","pct","bg","pjOut","svc","po","refund","skOut"];
+    rows.push(SEC("Внепроектные расходы"));
+    epOrder.forEach(function(k){
+      var pv=r.epCat_v[k]||0,pt=r.epCat_t[k]||0;
+      if(!pv&&!pt)return;
+      rows.push(TR6(epLabels[k]||k,pv+pt,pv,null,pt,null,"",1));
+    });
+    // любые категории вне epOrder
+    Object.keys(r.epCat_v).concat(Object.keys(r.epCat_t)).forEach(function(k){
+      if(epOrder.indexOf(k)>=0)return;
+      var pv=r.epCat_v[k]||0,pt=r.epCat_t[k]||0;
+      if(!pv&&!pt)return;
+      rows.push(TR6(epLabels[k]||k,pv+pt,pv,null,pt,null,"",1));
+    });
+    rows.push(SEP6("Итого внепроектные",r.vEpTotal+r.tEpTotal,r.vEpTotal,null,r.tEpTotal,null,""));
+  }
 
   rows.push(SEC("Переводы между счетами"));
   if(r.trIn_v||r.trIn_t){
