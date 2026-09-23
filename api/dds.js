@@ -227,7 +227,7 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap){
       else{if(isV)vPoIn+=inc;if(isT)tPoIn+=inc;}
     }
     if(out!==0){
-      if(cat==="zp"){if(isV)vZp+=out;if(isT)tZp+=out;}
+      if(cat==="zp"){if(pOk&&!pOff){if(isV){vPjOut+=out;poP_v[rp]=(poP_v[rp]||0)+out;}if(isT){tPjOut+=out;poP_t[rp]=(poP_t[rp]||0)+out;}}else{if(isV)vZp+=out;if(isT)tZp+=out;}}
       else if(cat==="km"){if(isV)vKm+=out;if(isT)tKm+=out;}
       else if(cat==="ins"){if(isV)vIns+=out;if(isT)tIns+=out;}
       else if(cat==="bk"){if(isV)vBk+=out;if(isT)tBk+=out;}
