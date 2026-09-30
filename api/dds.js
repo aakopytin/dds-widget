@@ -162,7 +162,7 @@ function loadAll(entity,extra){
   return next();
 }
 
-function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap){
+function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
   var cMap={};
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
@@ -175,6 +175,15 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap){
     var effEnd=cutoff||rng.s1;
     if(tx.date<=effEnd){if(VSIP[aid])vEnd+=inc-out;if(TT[aid])tEnd+=inc-out;}
   });
+  // Начальный остаток (fixed_balance из bank_account — не транзакция)
+  var _effEnd=cutoff||rng.s1;
+  if(bankAccts){bankAccts.forEach(function(ba){
+    var fb=parseFloat(ba.fixed_balance)||0,fbd=ba.fixed_balance_date||'';
+    if(!fb||!fbd)return;
+    var baid=+ba.id;
+    if(VSIP[baid]){if(fbd<rng.s0)vSt+=fb;if(fbd<=_effEnd)vEnd+=fb;}
+    if(TT[baid]){if(fbd<rng.s0)tSt+=fb;if(fbd<=_effEnd)tEnd+=fb;}
+  });}
 
   var vPr=0,tPr=0,vPjIn=0,tPjIn=0,piP_v={},piP_t={};
   var vRefund=0,tRefund=0,vPoIn=0,tPoIn=0;
@@ -578,9 +587,10 @@ function load(reset){
     loadAll("categories"),
     loadAll("transaction_pls",{"filter[category_id]":"3144,3147"}).catch(function(){return[];}),
     loadAll("crm_account").catch(function(){return[];}),
-    loadAll("project").catch(function(){return[];})
+    loadAll("project").catch(function(){return[];}),
+    loadAll("bank_account").catch(function(){return[];})
   ]).then(function(res){
-    var txAll=res[0],cats=res[1],pls=res[2],contrArr=res[3],projArr=res[4];
+    var txAll=res[0],cats=res[1],pls=res[2],contrArr=res[3],projArr=res[4],bankAccts=res[5];
     _bgtTxCache=txAll; _bgtCatCache=cats;  // кэшируем для таблицы Бюджет-факт
     loadBudget();
     var contrMap={};(contrArr||[]).forEach(function(c){if(c.id)contrMap[c.id]=c.name||"";});
@@ -593,7 +603,7 @@ function load(reset){
     var rng=getRange();
     var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=cutoff;});
     if(txM.length){
-      var r=calc(txM,txAll,cats,pls,rng,cutoff,contrMap,projMap);
+      var r=calc(txM,txAll,cats,pls,rng,cutoff,contrMap,projMap,bankAccts);
       el.innerHTML=render(r,true,projMap);
       renderPoDet(r.poDet);
     }else{
