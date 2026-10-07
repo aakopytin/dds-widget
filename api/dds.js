@@ -99,6 +99,8 @@ var API_BASE="${esc(h)}"?"https://${esc(h)}":(location.origin||"");
 var _bgtTxCache=null, _bgtCatCache=null;  // кэш для таблицы Бюджет-факт
 var VSIP={2:1,3:1,4:1,5:1,6:1,7:1,8:1,161:1,166:1};  // 3=ИП и СС, 161=Прочие счета, 166=Альфа Т (ТБанк)
 var TT={18:1};  // 26 (Счет СМ ТТ) не включается в расчёт
+var VP={211:1,212:1};  // компания «ВСИП Прочие» (org_id=4): 211=ВСИП СС, 212=ВСИП ИП
+function isVA(aid){return !!(VSIP[aid]||VP[aid]);}  // ВСИП + ВСИП Прочие — одна сторона в движении
 var OFF={24:1};
 var PN={1:"Кемерово",2:"Рассказово (ЦДА Тамбов)",3:"Южно-Сахалинск",4:"Омутнинск (ЦДА Омутнинск)",5:"Строитель",6:"Десногорск (ЦДА Смоленск)",7:"Иволгинск (ЦДА Иволгинск)",8:"Прочие проекты ИКП",9:"Рузаевка (ЦДА Рузаевка)",10:"Большое Болдино (ЦДА Болдино)",11:"Новокуйбышевск",12:"Киров",13:"Барнаул",14:"Тамбов",15:"Одинцово",16:"Покровское",17:"Прочие проекты РСХБ",18:"Уни",19:"Красногорское",20:"Чечня",21:"Сити",22:"Гарпия",23:"Сыктывкар",24:"ВСИП Офис",25:"Типовой проект",26:"ТТ общие расходы",29:"Первомайское",30:"Угловское",31:"Тогул",32:"Менжинского",33:"Голутвинский",34:"Толбазы (ЦДА Толбазы)",35:"Внепроектные расходы",36:"Корректировки НДС",100:"Центральный договор",101:"Прочие проекты",102:"Голутвинский"};
 var PO=[1,3,10,13,12,23,9,7,6,102,100,101];
@@ -166,14 +168,14 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
   var cMap={};
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
-  var vSt=0,tSt=0,vEnd=0,tEnd=0;
+  var vSt=0,tSt=0,vEnd=0,tEnd=0,pSt=0,pEnd=0;  // p* — ВСИП Прочие
   txAll.forEach(function(tx){
     if(!tx.date)return;
     var aid=tx.org_account_id;
     var inc=_ddsNum(tx.income)||0,out=_ddsNum(tx.outcome)||0;
-    if(tx.date<rng.s0){if(VSIP[aid])vSt+=inc-out;if(TT[aid])tSt+=inc-out;}
+    if(tx.date<rng.s0){if(VSIP[aid])vSt+=inc-out;if(TT[aid])tSt+=inc-out;if(VP[aid])pSt+=inc-out;}
     var effEnd=cutoff||rng.s1;
-    if(tx.date<=effEnd){if(VSIP[aid])vEnd+=inc-out;if(TT[aid])tEnd+=inc-out;}
+    if(tx.date<=effEnd){if(VSIP[aid])vEnd+=inc-out;if(TT[aid])tEnd+=inc-out;if(VP[aid])pEnd+=inc-out;}
   });
   // Начальный остаток (fixed_balance из bank_account — не транзакция)
   var _effEnd=cutoff||rng.s1;
@@ -183,6 +185,7 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
     var baid=+ba.id;
     if(VSIP[baid]){if(fbd<rng.s0)vSt+=fb;if(fbd<=_effEnd)vEnd+=fb;}
     if(TT[baid]){if(fbd<rng.s0)tSt+=fb;if(fbd<=_effEnd)tEnd+=fb;}
+    if(VP[baid]){if(fbd<rng.s0)pSt+=fb;if(fbd<=_effEnd)pEnd+=fb;}
   });}
 
   var vPr=0,tPr=0,vPjIn=0,tPjIn=0,piP_v={},piP_t={};
@@ -203,7 +206,7 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
     var ref=tx.reference_id;if(!ref)return;
     var aid=tx.org_account_id,cn=cMap[tx.category_id]||"";
     if(AC[cn]!=="tr")return;
-    var isV=!!VSIP[aid],isT=!!TT[aid];if(!isV&&!isT)return;
+    var isV=isVA(aid),isT=!!TT[aid];if(!isV&&!isT)return;
     if(!trRef[ref])trRef[ref]={vIn:0,vOut:0,tIn:0,tOut:0};
     var inc=_ddsNum(tx.income)||0,out=_ddsNum(tx.outcome)||0;
     if(isV){trRef[ref].vIn+=inc;trRef[ref].vOut+=out;}
@@ -214,7 +217,7 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
     var aid=tx.org_account_id,cn=cMap[tx.category_id]||"";
     var pid=tx.project_id||0;
     var inc=_ddsNum(tx.income)||0,out=_ddsNum(tx.outcome)||0;
-    var isV=!!VSIP[aid],isT=!!TT[aid];
+    var isV=isVA(aid),isT=!!TT[aid];
     if(!isV&&!isT)return;
     var rp=pid,gp=(rp&&PG[rp])?PG[rp]:rp;
     var pOk=rp&&rp!==28&&rp!==27&&!!(projMap&&projMap[rp]||PN[gp]),pOff=rp&&!!OFF[rp];
@@ -258,9 +261,9 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
       else if(cat==="skOut"){if(isV)vSkOut+=out;if(isT)tSkOut+=out;}
       else if(cat==="svc"){
         if(pOk){if(isV){vPjOut+=out;if(rp)poP_v[rp]=(poP_v[rp]||0)+out;}if(isT){tPjOut+=out;if(rp)poP_t[rp]=(poP_t[rp]||0)+out;}}
-        else{if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.crm_account_id&&contrMap[tx.crm_account_id])||"",org:isV?"ВСИП":"ТТ"});}
+        else{if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.crm_account_id&&contrMap[tx.crm_account_id])||"",org:VP[aid]?"ВСИП Прочие":isV?"ВСИП":"ТТ"});}
       }
-      else if(cat==="po"){if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.crm_account_id&&contrMap[tx.crm_account_id])||"",org:isV?"ВСИП":"ТТ"});}
+      else if(cat==="po"){if(isV)vPo+=out;if(isT)tPo+=out;poDet.push({date:tx.date,cat:cn,out:out,contr:(contrMap&&tx.crm_account_id&&contrMap[tx.crm_account_id])||"",org:VP[aid]?"ВСИП Прочие":isV?"ВСИП":"ТТ"});}
       else if(cat==="pjOut"){
         if(pOk&&!pOff){if(isV){vPjOut+=out;if(rp)poP_v[rp]=(poP_v[rp]||0)+out;}if(isT){tPjOut+=out;if(rp)poP_t[rp]=(poP_t[rp]||0)+out;}}
         else{if(isV)vPjOutOff+=out;if(isT)tPjOutOff+=out;}
@@ -281,7 +284,7 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
     if(!tx.reference_id)return;
     var aid=tx.org_account_id,cn=cMap[tx.category_id]||"",cat=AC[cn];
     if(!cat)return;
-    if(VSIP[aid])refCat_v[tx.reference_id]=cat;
+    if(isVA(aid))refCat_v[tx.reference_id]=cat;
     if(TT[aid])refCat_t[tx.reference_id]=cat;
   });
 
@@ -307,12 +310,12 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
       var inc47=_ddsNum(p.income)||0;if(!inc47)return;
       // pid=27 must be checked BEFORE pOk — project 27 may exist in PN
       if(pid===27){
-        if(p.org_id===1){var rf27a=p.reference_id?trRef[p.reference_id]:null;var intV27a=rf27a&&rf27a.vIn>0&&rf27a.vOut>0&&!rf27a.tIn&&!rf27a.tOut;if(!intV27a){vVatTrIn+=inc47;vVatTr+=inc47;}}
+        if((p.org_id===1||p.org_id===4)){var rf27a=p.reference_id?trRef[p.reference_id]:null;var intV27a=rf27a&&rf27a.vIn>0&&rf27a.vOut>0&&!rf27a.tIn&&!rf27a.tOut;if(!intV27a){vVatTrIn+=inc47;vVatTr+=inc47;}}
         else if(p.org_id===2){tVatTrIn+=inc47;tVatTr+=inc47;}
         return;
       }
-      if(!pOk){if(p.org_id===1){if(refPG_v[gp]){vVatRefV+=inc47;vVatTotalIn+=inc47;}else{vVatTr+=inc47;}}else if(p.org_id===2){if(refPG_t[gp]){tVatRefV+=inc47;tVatTotalIn+=inc47;}else{tVatTr+=inc47;}}return;}
-      if(p.org_id===1){
+      if(!pOk){if((p.org_id===1||p.org_id===4)){if(refPG_v[gp]){vVatRefV+=inc47;vVatTotalIn+=inc47;}else{vVatTr+=inc47;}}else if(p.org_id===2){if(refPG_t[gp]){tVatRefV+=inc47;tVatTotalIn+=inc47;}else{tVatTr+=inc47;}}return;}
+      if((p.org_id===1||p.org_id===4)){
         if((piP_v[pid]||0)>0){vVatPiP[pid]=(vVatPiP[pid]||0)+inc47;}
         else if(refPG_v[gp]){vVatRefV+=inc47;}
         else{vVatTr+=inc47;}
@@ -329,13 +332,13 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
       var out44=_ddsNum(p.outcome)||0;if(!out44)return;
       // pid=27 must be checked BEFORE pOk — project 27 may exist in PN
       if(pid===27){
-        if(p.org_id===1){var rf27b=p.reference_id?trRef[p.reference_id]:null;var intV27b=rf27b&&rf27b.vIn>0&&rf27b.vOut>0&&!rf27b.tIn&&!rf27b.tOut;if(!intV27b){vVatTrOut+=out44;vVatTr+=out44;}}
+        if((p.org_id===1||p.org_id===4)){var rf27b=p.reference_id?trRef[p.reference_id]:null;var intV27b=rf27b&&rf27b.vIn>0&&rf27b.vOut>0&&!rf27b.tIn&&!rf27b.tOut;if(!intV27b){vVatTrOut+=out44;vVatTr+=out44;}}
         else if(p.org_id===2){tVatTrOut+=out44;tVatTr+=out44;}
         return;
       }
       if(!pOk){
         {
-          if(p.org_id===1){
+          if((p.org_id===1||p.org_id===4)){
             vVatOffV+=out44;vVatTotalOut+=out44;
             var oc=refCat_v[p.reference_id]||"po";
             if(oc==="zp")vVatZp+=out44;else if(oc==="km")vVatKm+=out44;else if(oc==="bk")vVatBk+=out44;
@@ -353,7 +356,7 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
         }
         return;
       }
-      if(p.org_id===1){vVatPoP[pid]=(vVatPoP[pid]||0)+out44;vVatTotalOut+=out44;}
+      if((p.org_id===1||p.org_id===4)){vVatPoP[pid]=(vVatPoP[pid]||0)+out44;vVatTotalOut+=out44;}
       else if(p.org_id===2){tVatPoP[pid]=(tVatPoP[pid]||0)+out44;tVatTotalOut+=out44;}
     }
   });
@@ -376,13 +379,13 @@ function calc(txMonth,txAll,cats,plsData,rng,cutoff,contrMap,projMap,bankAccts){
   var te=pjOut+pjOutOff+zp+km+bk+ins+lz+ar+buh+ntax+po+pct+bg+epTotal;
   var skIn=vSkIn+tSkIn,skOut=vSkOut+tSkOut;
   var trNetto=(trIn_v+trIn_t)-(trOut_v+trOut_t);
-  var tS=vSt+tSt,tE=vEnd+tEnd;
+  var tS=vSt+tSt+pSt,tE=vEnd+tEnd+pEnd;
   var ctrl=tS+tot+skIn-(te+skOut-trNetto)-tE;
-  var vCtrl=vSt+(vPjIn+vPr+vRefund+vPoIn+vSkIn+trIn_v)-(vPjOut+vPjOutOff+vZp+vKm+vBk+vIns+vLz+vAr+vBuh+vNtax+vPo+vPct+vBg+vSkOut+trOut_v+vEpTotal)-vEnd;
+  var vCtrl=vSt+pSt+(vPjIn+vPr+vRefund+vPoIn+vSkIn+trIn_v)-(vPjOut+vPjOutOff+vZp+vKm+vBk+vIns+vLz+vAr+vBuh+vNtax+vPo+vPct+vBg+vSkOut+trOut_v+vEpTotal)-vEnd-pEnd;
   var tCtrl=tSt+(tPjIn+tPr+tRefund+tPoIn+tSkIn+trIn_t)-(tPjOut+tPjOutOff+tZp+tKm+tBk+tIns+tLz+tAr+tBuh+tNtax+tPo+tPct+tBg+tSkOut+trOut_t+tEpTotal)-tEnd;
   var cOk=Math.abs(ctrl)<1;
 
-  return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,tS:tS,tE:tE,
+  return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,pSt:pSt,pEnd:pEnd,tS:tS,tE:tE,
     vPr:vPr,tPr:tPr,pr:pr,vPjIn:vPjIn,tPjIn:tPjIn,piP_v:piP_v,piP_t:piP_t,pjIn:pjIn,
     vRefund:vRefund,tRefund:tRefund,refund:refund,vPoIn:vPoIn,tPoIn:tPoIn,poIn:poIn,tot:tot,
     vPjOut:vPjOut,tPjOut:tPjOut,pjOut:pjOut,vPjOutOff:vPjOutOff,tPjOutOff:tPjOutOff,pjOutOff:pjOutOff,poP_v:poP_v,poP_t:poP_t,
@@ -430,9 +433,11 @@ function render(r,live,projMap){
   var rows=[];rows.push(HDR());
   rows.push(TR6("Остаток "+r.d0+" · ВСИП",r.vSt,r.vSt,null,null,null,"",""));
   rows.push(TR6("Остаток "+r.d0+" · ТТ",r.tSt,null,null,r.tSt,null,r.tSt<0?"r":"",""));
+  rows.push(TR6("Остаток "+r.d0+" · ВСИП Прочие",r.pSt,r.pSt,null,null,null,r.pSt<0?"r":"",""));
   rows.push(SEP6("ИТОГО на "+r.d0,r.tS,r.vSt,null,r.tSt,null,""));
   rows.push(TR6("Остаток "+r.d1+" · ВСИП",r.vEnd,r.vEnd,null,null,null,"",""));
   rows.push(TR6("Остаток "+r.d1+" · ТТ",r.tEnd,null,null,r.tEnd,null,r.tEnd<0?"r":"",""));
+  rows.push(TR6("Остаток "+r.d1+" · ВСИП Прочие",r.pEnd,r.pEnd,null,null,null,r.pEnd<0?"r":"",""));
   rows.push(SEP6("ИТОГО на "+r.d1,r.tE,r.vEnd,null,r.tEnd,null,r.tE>=0?"g":"r"));
 
   rows.push(SEC("Поступления"));
