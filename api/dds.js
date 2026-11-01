@@ -96,7 +96,7 @@ var ACCOUNT_ID="${esc(a)}";
 var TOKEN="${esc(t)}";
 var API_BASE="${esc(h)}"?"https://${esc(h)}":(location.origin||"");
 
-var _bgtTxCache=null, _bgtCatCache=null;  // кэш для таблицы Бюджет-факт
+var _bgtTxCache=null, _bgtCatCache=null, _bgtPlanCache=null;  // кэш для таблицы Бюджет-факт
 var VSIP={2:1,3:1,4:1,5:1,6:1,7:1,8:1,161:1,166:1};  // 3=ИП и СС, 161=Прочие счета, 166=Альфа Т (ТБанк)
 var TT={18:1};  // 26 (Счет СМ ТТ) не включается в расчёт
 var VP={211:1,212:1};  // компания «ВСИП Прочие» (org_id=4): 211=ВСИП СС, 212=ВСИП ИП
@@ -144,11 +144,15 @@ function getRange(){
 var lk=function(ym){return"dds_"+ACCOUNT_ID+"_"+ym;};
 function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
 
+// Загрузка сущности «пачками» по 15 страниц Aspro за один запрос к /api/data (chunk=0,1,2…).
+// Ответы кешируются CDN на 2 минуты; _FORCE (кнопка ↻ / ⟳₀) — запрос в обход кеша.
+var _FORCE="";
 function loadAll(entity,extra){
-  var all=[],page=1;
+  var all=[],chunk=0;
   function next(){
     var p=new URLSearchParams(extra||{});
-    p.set('entity',entity);p.set('limit','100');p.set('page',String(page));
+    p.set('entity',entity);p.set('chunk',String(chunk));
+    if(_FORCE)p.set('_t',_FORCE);
     return fetch(API_BASE+'/api/data?'+p.toString()).then(function(r){
       if(!r.ok)throw new Error('HTTP '+r.status);
       return r.json();
@@ -158,7 +162,7 @@ function loadAll(entity,extra){
       var total=(d.response&&d.response.total)||0;
       all=all.concat(items);
       if(all.length>=total||items.length===0)return all;
-      page++;return next();
+      chunk++;return next();
     });
   }
   return next();
@@ -592,11 +596,12 @@ function load(reset){
     loadAll("categories"),
     loadAll("transaction_pls",{"filter[category_id]":"3144,3147"}).catch(function(){return[];}),
     loadAll("crm_account").catch(function(){return[];}),
-    loadAll("project").catch(function(){return[];}),
+    Promise.resolve([]),   // проекты: запрос убран (сервер его не поддерживал), названия — из справочника PN
     loadAll("bank_account").catch(function(){return[];})
   ]).then(function(res){
     var txAll=res[0],cats=res[1],pls=res[2],contrArr=res[3],projArr=res[4],bankAccts=res[5];
-    _bgtTxCache=txAll; _bgtCatCache=cats;  // кэшируем для таблицы Бюджет-факт
+    _lastLoad=Date.now();
+    _bgtTxCache=txAll; _bgtCatCache=cats; _bgtPlanCache=null;  // кэшируем для таблицы Бюджет-факт; планы перечитать
     loadBudget();
     var contrMap={};(contrArr||[]).forEach(function(c){if(c.id)contrMap[c.id]=c.name||"";});
     // Карта проектов: id → name, исключая «Проект СМ» (project_id=28)
@@ -614,8 +619,9 @@ function load(reset){
     }else{
       el.innerHTML="<div style='padding:12px;font-size:11px;color:#666'>Нет данных за "+rng.label+" ("+rng.s0+" — "+rng.s1+")</div>";
     }
-    var b=document.getElementById("btn");if(b)b.onclick=function(){load(false);};
-    var rb=document.getElementById("rst");if(rb)rb.onclick=function(){load(true);};
+    _FORCE="";
+    var b=document.getElementById("btn");if(b)b.onclick=function(){_FORCE=String(Date.now());load(false);};
+    var rb=document.getElementById("rst");if(rb)rb.onclick=function(){_FORCE=String(Date.now());load(true);};
   }).catch(function(e){
     el.innerHTML="<div style='padding:12px;color:#dc2626'>Ошибка: "+e+"</div>";
     console.error("[DDS]",e);
@@ -633,7 +639,12 @@ function load(reset){
 })();
 
 load(false);
-setInterval(function(){load(false);},5*60*1000);
+// Автообновление каждые 5 минут отключено (нагрузка на Vercel). Обновление: при открытии, кнопкой ↻,
+// а также при возврате на вкладку, если данным больше 30 минут.
+var _lastLoad=Date.now();
+document.addEventListener("visibilitychange",function(){
+  if(document.visibilityState==="visible"&&Date.now()-_lastLoad>30*60*1000){_FORCE=String(Date.now());load(false);}
+});
 
 // ===== БЮДЖЕТ-ФАКТ =====
 function loadBudget(){
@@ -649,8 +660,8 @@ function loadBudget(){
   var me=ym+"-"+(mEnd<10?"0":"")+mEnd;
   var bgtEl=document.getElementById("bgt-root");
   bgtEl.innerHTML="<span style='color:#9ca3af;font-size:11px'>загрузка...</span>";
-  loadAll("plan_money").then(function(plans){
-    plans=plans||[];
+  (_bgtPlanCache?Promise.resolve(_bgtPlanCache):loadAll("plan_money")).then(function(plans){
+    plans=plans||[]; _bgtPlanCache=plans;   // смена проекта/месяца — без повторной загрузки планов
     var txns=_bgtTxCache||[], cats=_bgtCatCache||[];
     var cMap={};
     cats.forEach(function(c){cMap[parseInt(c.id)]={name:c.name||"",parent_id:parseInt(c.parent_id)||0};});
