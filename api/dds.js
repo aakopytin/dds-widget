@@ -684,8 +684,10 @@ function loadBudget(){
       if(parseInt(tx.org_id)===3)return;
       var cid=parseInt(tx.category_id);
       if(SKIP[cid])return;
-      var amt=(parseFloat(tx.outcome)||0)-(parseFloat(tx.income)||0);
-      if(amt<=0)return;
+      // Расход = outcome со знаком: отрицательные расходы (возвраты/сторно по расходным статьям) уменьшают факт.
+      // Транзакции-поступления (outcome = 0) в факт расходов не входят.
+      var amt=_ddsNum(tx.outcome)||0;
+      if(!amt)return;
       fct[cid]=(fct[cid]||0)+amt;
     });
     var allCids={};
