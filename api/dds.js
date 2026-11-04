@@ -84,6 +84,9 @@ details table td{font-size:11px;color:#555;padding:2px 4px}
       <option value="7">Иволгинск</option>
       <option value="10">Большое Болдино</option>
       <option value="102">Голутвинский</option>
+      <option disabled>──────────</option>
+      <option value="24">ВСИП офис</option>
+      <option value="26">ТТ офис</option>
     </select>
     <select id="bgt-month" style="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:2px 6px;color:#374151;background:#fff"></select>
   </div>
@@ -671,9 +674,17 @@ function loadBudget(){
       return cur||cid;
     }
     // Бюджет: org_account_id=36, project_id=proj (с учётом PG), type=40, фильтр по plan_paid_date
-    var bud={};
+    // Офис (24 — ВСИП офис, 26 — ТТ офис): дополнительно внебюджет (счёт 150) отдельной колонкой
+    var isOff=(proj===24||proj===26);
+    var bud={},eb={};
     plans.forEach(function(p){
-      if(parseInt(p.org_account_id)!==36)return;
+      var acc=parseInt(p.org_account_id);
+      if(isOff&&acc===150){
+        if((parseInt(p.project_id)||0)!==proj||parseInt(p.type)!==40)return;
+        var pdE=p.plan_paid_date||"";if(pdE<ms||pdE>me)return;
+        var cE=parseInt(p.category_id);eb[cE]=(eb[cE]||0)+(parseFloat(p.total)||0);return;
+      }
+      if(acc!==36)return;
       var ppid=parseInt(p.project_id)||0;
       var pgp=(ppid&&PG[ppid])?PG[ppid]:ppid;
       if(pgp!==proj)return;
@@ -686,6 +697,7 @@ function loadBudget(){
     // Факт: из кэша основного load() — с той же PG-логикой что и в верхней таблице
     var fct={};
     var SKIP={1004:1,1007:1,3144:1,3147:1,3157:1,3158:1};
+    if(isOff)SKIP={1004:1,1007:1,3157:1,3158:1};  // офис: уплата НДС в бюджет (3144) — расход офиса, есть в бюджете
     txns.forEach(function(tx){
       var td=tx.date||"";
       if(td<ms||td>me)return;
@@ -704,9 +716,25 @@ function loadBudget(){
     var allCids={};
     Object.keys(bud).forEach(function(k){allCids[k]=1;});
     Object.keys(fct).forEach(function(k){allCids[k]=1;});
+    Object.keys(eb).forEach(function(k){allCids[k]=1;});
     var MAT=4,SMR=3109;
     var gMat=[],gSmr=[],gOth=[];
-    Object.keys(allCids).forEach(function(k){
+    var offSec={},offOrder=[];
+    if(isOff)Object.keys(allCids).forEach(function(k){
+      // Группы офиса: родительская статья с подстатьями (Зарплата, Офис) — своим разделом;
+      // НДС/налог на прибыль/налоги и взносы — «Налоги»; финансовая деятельность (type=3) — «Финансовая деятельность»; остальное — «Прочие»
+      var cid=parseInt(k),rp=rootParent(cid),key,lbl;
+      var TAX={3144:1,1009:1,3142:1};
+      var hasKids=cats.some(function(c){return (parseInt(c.parent_id)||0)===rp;});
+      var ctype=parseInt((cats.filter(function(c){return parseInt(c.id)===cid;})[0]||{}).type)||1;
+      if(rp!==cid||hasKids){key="r"+rp;lbl=(cMap[rp]&&cMap[rp].name)||("кат."+rp);}
+      else if(TAX[cid]){key="tax";lbl="Налоги";}
+      else if(ctype===3){key="fin";lbl="Финансовая деятельность";}
+      else{key="oth";lbl="Прочие";}
+      if(!offSec[key]){offSec[key]={lbl:lbl,cids:[]};offOrder.push(key);}
+      offSec[key].cids.push(cid);
+    });
+    if(!isOff)Object.keys(allCids).forEach(function(k){
       var cid=parseInt(k),rp=rootParent(cid);
       if(rp===MAT)gMat.push(cid);
       else if(rp===SMR)gSmr.push(cid);
@@ -718,39 +746,46 @@ function loadBudget(){
     var TD="padding:2px 6px;font-size:11px;";
     var TDR=TD+"text-align:right;white-space:nowrap;";
     function dClr(d){return d<-100?"#dc2626":d>100?"#15803d":"#6b7280";}
-    function row(lbl,b,f,ind,bold,bg){
-      var d=b-f,fw=bold?"font-weight:600;":"";
+    function row(lbl,b,f,ind,bold,bg,e){
+      var d=b+(e||0)-f,fw=bold?"font-weight:600;":"";
       return "<tr style='background:"+(bg||"transparent")+"'>"
         +"<td style='"+TD+fw+"padding-left:"+(ind||4)+"px'>"+lbl+"</td>"
         +"<td style='"+TDR+fw+"'>"+fmt(b)+"</td>"
+        +(isOff?"<td style='"+TDR+fw+"'>"+fmt(e)+"</td>":"")
         +"<td style='"+TDR+fw+"'>"+fmt(f)+"</td>"
         +"<td style='"+TDR+fw+"color:"+dClr(d)+"'>"+fmt(d)+"</td>"
         +"</tr>";
     }
     function section(cids,lbl){
       if(!cids.length)return"";
-      var sB=0,sF=0,rows="";
+      var sB=0,sF=0,sE=0,rows="";
       cids.forEach(function(cid){
-        var b=bud[cid]||0,f=fct[cid]||0;
-        sB+=b;sF+=f;
-        rows+=row((cMap[cid]&&cMap[cid].name)||("кат."+cid),b,f,14,false,"");
+        var b=bud[cid]||0,f=fct[cid]||0,e=eb[cid]||0;
+        sB+=b;sF+=f;sE+=e;
+        rows+=row((cMap[cid]&&cMap[cid].name)||("кат."+cid),b,f,14,false,"",e);
       });
-      return row(lbl,sB,sF,4,true,"#eff6ff")+rows+row("Итого: "+lbl,sB,sF,4,false,"#f3f4f6");
+      return row(lbl,sB,sF,4,true,"#eff6ff",sE)+rows+row("Итого: "+lbl,sB,sF,4,false,"#f3f4f6",sE);
     }
-    var tB=0,tF=0;
+    var tB=0,tF=0,tE=0;
+    Object.keys(eb).forEach(function(k){tE+=eb[k]||0;});
+    var body;
+    if(isOff){
+      var ORD={tax:2,fin:3,oth:1};
+      offOrder.sort(function(a,b){var oa=ORD[a]||0,ob=ORD[b]||0;if(oa!==ob)return oa-ob;return offSec[a].lbl.localeCompare(offSec[b].lbl,"ru");});
+      body=offOrder.map(function(k){offSec[k].cids.sort(byNm);return section(offSec[k].cids,offSec[k].lbl);}).join("");
+    }else body=section(gMat,"Материалы")+section(gSmr,"СМР")+section(gOth,"Прочие");
     Object.keys(bud).forEach(function(k){tB+=bud[k]||0;});
     Object.keys(fct).forEach(function(k){tF+=fct[k]||0;});
     var html="<table style='width:100%;border-collapse:collapse;border:1px solid #e5e7eb'>"
       +"<thead><tr style='background:#f8f9fd;border-bottom:2px solid #e5e7eb'>"
       +"<th style='"+TD+"text-align:left;font-weight:600'>Статья</th>"
       +"<th style='"+TDR+"font-weight:600'>Бюджет</th>"
+      +(isOff?"<th style='"+TDR+"font-weight:600'>Внебюджет</th>":"")
       +"<th style='"+TDR+"font-weight:600'>Факт</th>"
       +"<th style='"+TDR+"font-weight:600'>Остаток</th>"
       +"</tr></thead><tbody>"
-      +section(gMat,"Материалы")
-      +section(gSmr,"СМР")
-      +section(gOth,"Прочие")
-      +row("ИТОГО",tB,tF,4,true,"#e0e7ff")
+      +body
+      +row("ИТОГО",tB,tF,4,true,"#e0e7ff",tE)
       +"</tbody></table>";
     bgtEl.innerHTML=html;
   }).catch(function(e){
